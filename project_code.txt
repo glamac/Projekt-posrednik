@@ -1,0 +1,627 @@
+PROJECT CODE DUMP
+FILES: 9
+================================================================================
+
+INDEX:
+.streamlit/config.toml
+app.py
+cpm/__init__.py
+cpm/algorithm.py
+cpm/gantt.py
+cpm/graph.py
+pages/__init__.py
+pages/index.py
+scripts/merge.py
+
+================================================================================
+
+FILE: .streamlit/config.toml
+================================================================================
+# .streamlit/config.toml
+[client]
+
+showSidebarNavigation = false
+
+
+FILE: app.py
+================================================================================
+# app.py
+import pandas as pd
+import streamlit as st
+import networkx as nx
+import matplotlib.pyplot as plt
+from cpm.algorithm import CPMManager
+from cpm.graph import generate_cpm_graph
+from cpm.gantt import gantt_chart
+from io import BytesIO
+
+st.set_page_config(layout="wide", page_title="CPM Visualizer")
+
+# ---- Style ----
+st.markdown("""
+<style>
+    header.stAppHeader { background-color: transparent; }
+    section.stMain .block-container { padding-top: 0rem; z-index: 1; }
+    .stAppDeployButton { display:none }
+</style>""", unsafe_allow_html=True)
+
+# ---- Dane i Sidebar ----
+sidebar, content = st.columns([0.3, 0.7], border=True)
+
+formats = {0: "Poprzednicy", 1: "Następstwo zdarzeń"}
+
+if 'df0' not in st.session_state:
+    st.session_state.df0 = pd.DataFrame([
+        {"Czynność": "A", "Czas": 3, "Poprzednicy": ""},
+        {"Czynność": "B", "Czas": 4, "Poprzednicy": "A"},
+        {"Czynność": "C", "Czas": 6, "Poprzednicy": "A"},
+        {"Czynność": "D", "Czas": 6, "Poprzednicy": "B"},
+        {"Czynność": "E", "Czas": 4, "Poprzednicy": "B"},
+        {"Czynność": "F", "Czas": 4, "Poprzednicy": "C"},
+        {"Czynność": "G", "Czas": 6, "Poprzednicy": "D"},
+        {"Czynność": "H", "Czas": 8, "Poprzednicy": "E,F"},
+    ])
+if 'df1' not in st.session_state:
+    st.session_state.df1 = pd.DataFrame([
+        {"Czynność": "A", "Czas": 3, "Następstwo zdarzeń": "B,C"},
+        {"Czynność": "B", "Czas": 5, "Następstwo zdarzeń": "C"},
+        {"Czynność": "C", "Czas": 2, "Następstwo zdarzeń": ""}
+    ])
+
+with sidebar:
+    selection = st.segmented_control(
+        "Format danych", options=formats.keys(), default=0,
+        format_func=lambda x: formats[x], selection_mode="single"
+    )
+    key = f"df{selection}"
+    st.session_state[key] = st.data_editor(st.session_state[key], num_rows="dynamic", use_container_width=True)
+    active_df = st.session_state[key]
+
+with content:
+    st.title("Wizualizacja CPM")
+    if not active_df.empty:
+        try:
+            # 1. Inicjalizacja menedżera logiki
+            manager = CPMManager(active_df, selection)
+
+            # 2. Budowanie grafów
+            g_aon = manager.build_aon()
+            g_aoa = manager.build_aoa()
+
+            # 3. Grafy AON i AOA
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("🟦 Model AON")
+                img_aon = generate_cpm_graph(g_aon, "Model AON", is_aoa=False)
+                st.image(img_aon)
+            with c2:
+                st.subheader("🔵 Model AOA")
+                img_aoa = generate_cpm_graph(g_aoa, "Model AOA", is_aoa=True)
+                st.image(img_aoa)
+
+            # 4. Wykres Gantta
+            st.divider()
+            st.subheader("📊 Wykres Gantta")
+            img_gantt = gantt_chart(g_aon)
+            if img_gantt:
+                st.image(img_gantt, use_container_width=True)
+            else:
+                st.warning("Nie można wygenerować wykresu Gantta – sprawdź dane wejściowe.")
+
+        except Exception as e:
+            st.error(f"Błąd logiki: {e}")
+
+FILE: cpm/__init__.py
+================================================================================
+# cpm/__init__.py
+
+
+FILE: cpm/algorithm.py
+================================================================================
+# cpm/algorithm.py
+import networkx as nx
+
+class CPMManager:
+    def __init__(self, df, mode):
+        self.df = df
+        self.mode = mode # 0 dla Poprzedników, 1 dla Następnych
+
+    def build_aon(self):
+        G = nx.DiGraph()
+        for _, r in self.df.iterrows():
+            task = str(r["Czynność"]).strip().upper()
+            if not task: continue
+            G.add_node(task, d=r.get("Czas", 0))
+            
+            col = "Poprzednicy" if self.mode == 0 else "Następstwo zdarzeń"
+            rel = str(r.get(col, "")).strip()
+            
+            if rel and rel.lower() not in ["none", "nan", ""]:
+                for target in rel.split(","):
+                    t = target.strip().upper()
+                    if self.mode == 0: G.add_edge(t, task)
+                    else: G.add_edge(task, t)
+        return G
+
+    def build_aoa(self):
+        G = nx.DiGraph()
+        # Prosta wersja AOA dla celów wizualnych
+        ends, nodes, start = {}, 1, 0
+        for _, r in self.df.iterrows():
+            task = str(r["Czynność"]).strip().upper()
+            if not task: continue
+            
+            col = "Poprzednicy" if self.mode == 0 else "Następstwo zdarzeń"
+            rel = str(r.get(col, "")).strip()
+            preds = rel.split(",") if rel and rel.lower() not in ["none", "nan", ""] else []
+            
+            u = ends.get(preds[0].strip().upper(), start) if preds else start
+            v = nodes
+            G.add_edge(u, v, label=f"{task}({r.get('Czas', 0)})")
+            ends[task], nodes = v, nodes + 1
+        return G
+
+FILE: cpm/gantt.py
+================================================================================
+# cpm/gantt.py
+import networkx as nx
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from io import BytesIO
+
+
+#Obliczanie (ES, EF, LS, LF)
+
+def compute_cpm(G: nx.DiGraph) -> dict:
+    if not G.nodes:
+        return {}
+    #zbiera czasy trwania operacji
+    duration = {}
+    for i in G.nodes:
+        duration[i] = G.nodes[i].get("d", 0)
+    #Operacje w kolejności topologicznej
+    topolist = list(nx.topological_sort(G))
+
+    #Early start i Early Finish
+    ES = {}
+    EF = {}
+    for i in topolist:
+        pre = list(G.predecessors(i))
+    
+        if len(pre) == 0:
+            ES[i] = 0
+        else:
+            mozliwe_starty = []
+            for p in pre:
+                mozliwe_starty.append(EF[p])
+            ES[i] = max(mozliwe_starty)
+        EF[i] = ES[i] + duration[i]
+
+    project_end = max(EF.values())
+
+    #Late start i Late Finish
+    LF = {}
+    LS = {}
+    for i in reversed(topolist):
+        post = list(G.successors(i))
+        if len(post) == 0:
+            LF[i] = project_end
+        else:
+            mozliwe_konce = []
+            for s in post:
+                mozliwe_konce.append(ES[s])
+            LF[i] = min(mozliwe_konce)
+        LS[i] = LF[i] - duration[i]
+
+    result = {}
+    for i in topolist:
+        result[i] = {
+            "ES": ES[i],
+            "EF": EF[i],
+            "LS": LS[i],
+            "LF": LF[i],
+            "TF": LS[i] - ES[i],
+        }
+    return result
+
+def gantt_chart(G: nx.DiGraph) -> BytesIO | None:
+    if not G or not G.nodes:
+        return None
+
+    cpm = compute_cpm(G)
+    if not cpm:
+        return None
+
+    # Sortowanie czynności według ES, potem nazwy
+    tasks = sorted(cpm.keys(), key=lambda n: (cpm[n]["ES"], n))
+    n_tasks = len(tasks)
+    project_end = max(v["LF"] for v in cpm.values())
+
+
+    bar_h  = 0.5   # wysokość paska zadania
+    y_gap  = 1.0   # odstęp między wierszami
+
+    graph_height = max(4, n_tasks * y_gap + 1.5) # wysokość wykresu
+    #okno i obszar rysowania
+    fig, ax = plt.subplots(figsize=(12, graph_height), facecolor="#fbfcfd")
+    ax.set_facecolor("#fbfcfd")
+
+    for i, task in enumerate(tasks):
+        info = cpm[task]
+        y = (n_tasks - 1 - i) * y_gap   # oś Y od góry
+        es, ef = info["ES"], info["EF"]
+        ls, lf = info["LS"], info["LF"]
+        tf     = info["TF"]
+        dur    = G.nodes[task].get("d", 0)
+        is_critical = (tf == 0)
+
+        bar_color = "#EF4444" if is_critical else "#1E3A8A" 
+
+        # Pasek ES→EF (realizacja)
+        ax.barh(y, ef - es, left=es, height=bar_h,
+                color=bar_color, edgecolor="black", linewidth=0.5,
+                align="center", zorder=3)
+
+        # Pasek zapasu czasu EF→LF (float)
+        if tf > 0:
+            ax.barh(y, tf, left=ef, height=bar_h * 0.4,
+                    color="#334155", edgecolor="#64748B", linewidth=0.4,
+                    align="center", zorder=2, hatch="//", alpha=0.7)
+
+        # Etykieta na pasku: nazwa + czas
+        ax.text(es + (ef - es) / 2, y, f"{task} ({dur})",
+                ha="center", va="center",
+                fontsize=8, fontweight="bold", color="black", zorder=4)
+
+        # Etykiety ES / EF po bokach
+        ax.text(es - 0.1, y, str(es), ha="right", va="center",
+                fontsize=7, color="#94A3B8")
+        ax.text(ef + 0.1 + (tf if tf > 0 else 0), y, str(lf),
+                ha="left", va="center", fontsize=7, color="#94A3B8")
+
+    # --- Oś X i siatka ---
+    ax.set_xlim(-0.5, project_end + 1)
+    ax.set_ylim(-y_gap, n_tasks * y_gap)
+    ax.set_yticks([])
+
+    ax.set_xticks(range(0, int(project_end) + 2))
+    ax.tick_params(axis="x", colors="#94A3B8", labelsize=8)
+    ax.xaxis.label.set_color("#94A3B8")
+    ax.set_xlabel("Czas", color="#94A3B8", fontsize=9)
+
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#1e2530")
+
+    ax.set_axisbelow(True)
+    ax.xaxis.grid(True, color="#1e2530", linewidth=0.7, linestyle="--", zorder=0)
+
+    # --- Legenda ---
+    legend_elements = [
+        mpatches.Patch(facecolor="#EF4444", edgecolor="black", label="Ścieżka krytyczna (TF=0)"),
+        mpatches.Patch(facecolor="#1E3A8A" ,   edgecolor="black", label="Czynność zwykła"),
+        mpatches.Patch(facecolor="#334155", edgecolor="#64748B",
+                       hatch="//", alpha=0.7, label="Zapas czasu (TF)"),
+    ]
+    ax.legend(handles=legend_elements, loc="lower right",
+              facecolor="#1e2530", edgecolor="#334155",
+              labelcolor="black", fontsize=8)
+
+    ax.set_title("Wykres Gantta (CPM)", color="black", fontsize=12, pad=10)
+
+    fig.tight_layout()
+    buf = BytesIO()
+    plt.savefig(buf, format="png", transparent=False, dpi=130,
+                bbox_inches="tight", facecolor="#fbfcfd")
+    plt.close()
+    return buf
+
+FILE: cpm/graph.py
+================================================================================
+# cpm/graph.py
+import networkx as nx
+import matplotlib.pyplot as plt
+from io import BytesIO
+
+def generate_cpm_graph(G, title, is_aoa=False):
+    if not G or not G.nodes: 
+        return None
+    
+    # 2. Ustawienie wyglądu okna i tła
+    fig, ax = plt.subplots(figsize=(10, 6), facecolor='#0e1117')
+    
+    # 3. UKŁADANIE: Wyznaczanie 'warstw' (od lewej do prawej)
+    # Przechodzimy przez graf w kolejności technologicznej
+    for node in nx.topological_sort(G):
+        predecessors = list(G.predecessors(node))
+        # Jeśli brak poprzedników, warstwa = 0 (start). 
+        # W przeciwnym razie warstwa to maks. warstwa poprzednika + 1
+        G.nodes[node]['layer'] = 0 if not predecessors else max(G.nodes[p]['layer'] for p in predecessors) + 1
+    
+    # Multipartite_layout ustawia węzły w pionowych kolumnach na podstawie ich 'layer'
+    pos = nx.multipartite_layout(G, subset_key="layer")
+
+    # 4. RYSOWANIE: Wybór modelu wyświetlania
+    if is_aoa:
+        # Model AOA (Czynność na strzałce): Węzły to zdarzenia (koła)
+        nx.draw(G, pos, with_labels=True, node_color="#007BFF", node_size=700, ax=ax)
+        
+        # Pobieranie i rysowanie etykiet czynności na krawędziach (strzałkach)
+        edge_labels = nx.get_edge_attributes(G, 'label')
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8, font_color="#BFDBFE", bbox=dict(alpha=0))
+    else:
+        # Model AON (Czynność w węźle): Węzły to zadania (kwadraty)
+        # Przygotowanie etykiet z nazwą i czasem trwania (d)
+        node_labels = {n: f"{n}\n({G.nodes[n].get('d', 0)})" for n in G.nodes}
+        
+        nx.draw(G, pos, with_labels=True, labels=node_labels, 
+                node_shape="s", node_color="#1E3A8A", node_size=2000, font_color="white", ax=ax)
+
+    # 5. FINALIZACJA: Estetyka i eksport do Streamlit
+    ax.set_title(title, color="white")
+    ax.axis('off') # Ukrycie osi wykresu
+    
+    buf = BytesIO()
+    plt.savefig(buf, format="png", transparent=True)
+    plt.close()
+    return buf
+
+FILE: pages/__init__.py
+================================================================================
+# pages/__init__.py
+
+
+FILE: pages/index.py
+================================================================================
+# pages/index.py
+import streamlit as st
+
+st.title("Tutaj będzie jakieś menu")
+
+
+FILE: scripts/merge.py
+================================================================================
+# scripts/merge.py
+#!/usr/bin/env python3
+"""
+Unified Project Code Collector
+
+Steps:
+1. Indexing – add relative path comments to files
+2. Collecting – create a single project code dump file
+3. Cleanup – remove added comments, restoring original files
+"""
+
+import argparse
+import sys
+from pathlib import Path
+from typing import Set, Dict, List
+
+# ============================================================
+# CONFIG
+# ============================================================
+
+DEFAULT_IGNORE_DIRS = {
+    ".git", ".svn", ".hg", "__pycache__", "node_modules",
+    ".idea", ".vscode", ".vs", "build", "dist", "target",
+    "venv", "env", ".env", "coverage", ".mypy_cache",
+    "bin", "obj", "public", ".next", # ,"test", "tests",
+}
+
+DEFAULT_IGNORE_FILES = {
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb",
+    "cargo.lock", "Gemfile.lock", "composer.lock", "mix.lock",
+    "poetry.lock", "Pipfile.lock", "go.sum", "migration_lock.toml",
+    ".DS_Store", "Thumbs.db", "LICENSE", "LICENSE.txt",
+    "tsconfig.json", "tsconfig.app.json", "tsconfig.node.json",
+    "eslint.config.js", ".eslintrc.js", ".prettierrc",
+    "postcss.config.js", "tailwind.config.js",
+    "vite.config.ts", "vite.config.js",
+    "jest.config.js", "jest-e2e.json",
+    "index.html", "favicon.ico", "merger.py",
+}
+
+DEFAULT_EXTENSIONS = {
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".c", ".cpp",
+    ".h", ".hpp", ".cs", ".go", ".rs", ".php", ".rb",
+    ".css", ".scss", ".html", ".xml", ".json", ".yaml",
+    ".yml", ".sql", ".graphql", ".env", ".toml",
+    ".ini", ".cfg", ".conf", "dockerfile",
+}
+
+COMMENT_SYNTAX = {
+    "default": "# {}",
+    ".js": "// {}",
+    ".ts": "// {}",
+    ".jsx": "// {}",
+    ".tsx": "// {}",
+    ".java": "// {}",
+    ".c": "// {}",
+    ".cpp": "// {}",
+    ".cs": "// {}",
+    ".go": "// {}",
+    ".rs": "// {}",
+    ".php": "// {}",
+    ".css": "/* {} */",
+    ".scss": "/* {} */",
+    ".html": "<!-- {} -->",
+    ".xml": "<!-- {} -->",
+    ".md": "<!-- {} -->",
+    ".sql": "-- {}",
+    ".json": "# {}",
+}
+
+# ============================================================
+# UTILITIES
+# ============================================================
+
+def comment_for(ext: str, path: str) -> str:
+    return COMMENT_SYNTAX.get(ext, COMMENT_SYNTAX["default"]).format(path)
+
+
+def is_valid_file(path: Path) -> bool:
+    ext = path.suffix.lower()
+    if ext == "" and path.name.lower() == "dockerfile":
+        ext = "dockerfile"
+    return ext in DEFAULT_EXTENSIONS
+
+
+# ============================================================
+# STEP 1 – INDEXING
+# ============================================================
+
+def add_comment(file: Path, rel: str, dry: bool) -> bool:
+    try:
+        content = file.read_text(encoding="utf-8")
+    except:
+        return False
+
+    ext = file.suffix.lower()
+    comment = comment_for(ext, rel)
+
+    if any(comment in line for line in content.splitlines()[:5]):
+        return False
+
+    if not dry:
+        file.write_text(f"{comment}\n{content}", encoding="utf-8")
+    return True
+
+
+def index_files(root: Path, base: Path, dry: bool, verbose: bool):
+    for item in root.iterdir():
+        if item.name in DEFAULT_IGNORE_FILES:
+            continue
+        if item.is_dir():
+            if item.name not in DEFAULT_IGNORE_DIRS:
+                index_files(item, base, dry, verbose)
+            continue
+
+        if not is_valid_file(item):
+            continue
+
+        rel = str(item.relative_to(base)).replace("\\", "/")
+        if add_comment(item, rel, dry) and verbose:
+            print(f"Indexed: {rel}")
+
+
+# ============================================================
+# STEP 2 – COLLECTING
+# ============================================================
+
+def has_comment(file: Path, rel: str) -> bool:
+    try:
+        for line in file.read_text(encoding="utf-8").splitlines()[:10]:
+            if rel in line:
+                return True
+    except:
+        pass
+    return False
+
+
+def collect_files(root: Path, base: Path) -> List[Dict]:
+    collected = []
+    for item in root.rglob("*"):
+        if item.is_dir():
+            continue
+        if item.name in DEFAULT_IGNORE_FILES:
+            continue
+        if not is_valid_file(item):
+            continue
+
+        rel = str(item.relative_to(base)).replace("\\", "/")
+        if has_comment(item, rel):
+            collected.append({
+                "path": rel,
+                "full": item,
+                "size": item.stat().st_size,
+            })
+    return sorted(collected, key=lambda x: x["path"])
+
+
+def create_dump(output: Path, files: List[Dict]):
+    with output.open("w", encoding="utf-8") as f:
+        f.write(f"PROJECT CODE DUMP\nFILES: {len(files)}\n{'='*80}\n\n")
+        f.write("INDEX:\n")
+        for file in files:
+            f.write(f"{file['path']}\n")
+        f.write(f"\n{'='*80}\n")
+
+        for file in files:
+            f.write(f"\nFILE: {file['path']}\n{'='*80}\n")
+            try:
+                f.write(file["full"].read_text(encoding="utf-8"))
+            except:
+                f.write("[Unreadable file]")
+            f.write("\n")
+
+
+# ============================================================
+# STEP 3 – CLEANUP
+# ============================================================
+
+def clean_file(file: Path, rel: str, dry: bool) -> bool:
+    try:
+        lines = file.read_text(encoding="utf-8").splitlines(True)
+    except:
+        return False
+
+    ext = file.suffix.lower()
+    expected = comment_for(ext, rel)
+
+    if lines and lines[0].strip() == expected:
+        if not dry:
+            file.write_text("".join(lines[1:]), encoding="utf-8")
+        return True
+    return False
+
+
+def cleanup(root: Path, base: Path, dry: bool, verbose: bool):
+    for item in root.iterdir():
+        if item.name in DEFAULT_IGNORE_FILES:
+            continue
+        if item.is_dir():
+            if item.name not in DEFAULT_IGNORE_DIRS:
+                cleanup(item, base, dry, verbose)
+            continue
+
+        rel = str(item.relative_to(base)).replace("\\", "/")
+        if clean_file(item, rel, dry) and verbose:
+            print(f"Cleaned: {rel}")
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("directory", nargs="?", default=".")
+    parser.add_argument("--output", "-o", default="project_code.txt")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--verbose", "-v", action="store_true")
+    args = parser.parse_args()
+
+    base = Path(args.directory).resolve()
+    output = Path(args.output).resolve()
+    DEFAULT_IGNORE_FILES.add(output.name)
+
+    print("STEP 1: Indexing files...")
+    index_files(base, base, args.dry_run, args.verbose)
+
+    print("STEP 2: Collecting files...")
+    files = collect_files(base, base)
+    if not files:
+        print("No files collected.")
+        sys.exit(0)
+
+    create_dump(output, files)
+    print(f"Created dump: {output}")
+
+    print("STEP 3: Cleanup...")
+    cleanup(base, base, args.dry_run, args.verbose)
+
+    print("Done ✔")
+
+
+if __name__ == "__main__":
+    main()
+
