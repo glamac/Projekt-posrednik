@@ -1,6 +1,6 @@
- # CPM Project
+ # Pośrednik Projekt
 
-Aplikacja do rozwiązywania zadań metodą CPM (Critical Path Method).
+Aplikacja do rozwiązywania zadań z zagadnienia pośrednika metodą wierzchołka północno-zachodniego.
 
 ## Zespół
 - Miłosz Fido
