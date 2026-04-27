@@ -17,8 +17,8 @@ Aplikacja do rozwiązywania zadań z zagadnienia pośrednika metodą wierzchołk
 [//]: # (@TODO: szybki skrypt aby za ciebie zrobił venv w powershellu)
 
 ```sh
-git clone https://github.com/MiloszGafran/Projekt-cpm.git
-cd Projekt-cpm
+git clone https://github.com/glamac/Projekt-posrednik.git
+cd Projekt-posrednik
 
 python -m venv venv
 
