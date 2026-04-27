@@ -347,31 +347,31 @@ with tabs[0]:
     st.session_state.transport_df = edited_transport
 
 #USTAWIANIE BLOKADY NA DANE PARY RZECZYWISTE ODBIORCA-DOSTAWCA
-with tabs[1]:
-    st.subheader("Blokowanie tras")
+# with tabs[1]:
+#     st.subheader("Blokowanie tras")
 
-    current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
-    current_customers = st.session_state.demand_df["Odbiorca"].tolist()
+#     current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
+#     current_customers = st.session_state.demand_df["Odbiorca"].tolist()
 
-    if (
-        st.session_state.blocked_df.index.tolist() != current_suppliers
-        or st.session_state.blocked_df.columns.tolist() != current_customers
-    ):
-        new_blocked = pd.DataFrame(
-            False, index=current_suppliers, columns=current_customers
-        )
-        old_blocked = st.session_state.blocked_df
-        for i, row in enumerate(old_blocked.index):
-            if row in current_suppliers:
-                for j, col in enumerate(old_blocked.columns):
-                    if col in current_customers:
-                        new_blocked.loc[row, col] = old_blocked.iloc[i, j]
-        st.session_state.blocked_df = new_blocked
+#     if (
+#         st.session_state.blocked_df.index.tolist() != current_suppliers
+#         or st.session_state.blocked_df.columns.tolist() != current_customers
+#     ):
+#         new_blocked = pd.DataFrame(
+#             False, index=current_suppliers, columns=current_customers
+#         )
+#         old_blocked = st.session_state.blocked_df
+#         for i, row in enumerate(old_blocked.index):
+#             if row in current_suppliers:
+#                 for j, col in enumerate(old_blocked.columns):
+#                     if col in current_customers:
+#                         new_blocked.loc[row, col] = old_blocked.iloc[i, j]
+#         st.session_state.blocked_df = new_blocked
 
-    edited_blocked = st.data_editor(
-        st.session_state.blocked_df, use_container_width=True, key="blocked_editor"
-    )
-    st.session_state.blocked_df = edited_blocked
+#     edited_blocked = st.data_editor(
+#         st.session_state.blocked_df, use_container_width=True, key="blocked_editor"
+#     )
+#     st.session_state.blocked_df = edited_blocked
 
 #DOBÓR STATUSU NACISKU NA ODBIORCĘ:
 #Wymuś - jak na zajęciach, sprowadza się do zablokowania fikcyjnego dostawcy dla tego odbiorcy i ustwienia temu odbiorcy wyższego priorytetu.
@@ -379,44 +379,44 @@ with tabs[1]:
 #Ogranicz - niższy priorytet - obsługa pomiędzy normalnymi priorytetami, ale przed fikcyjnymi
 #Wykreśl - całkowicie blokuje jakiekolwiek rzeczywiste dostawy do tego rzeczywistego odbiorcy.
 #Na stan obecny zmiany w tabeli nie wpływają na obliczenia.
-# with tabs[1]:
-#     st.subheader("Blokowanie tras")
+with tabs[1]:
+    st.subheader("Blokowanie tras")
 
-#     current_customers = st.session_state.demand_df["Odbiorca"].unique().tolist()
+    current_customers = st.session_state.demand_df["Odbiorca"].unique().tolist()
 
-#     if (
-#         "customer_settings_df" not in st.session_state 
-#         or st.session_state.customer_settings_df["Odbiorca"].tolist() != current_customers
-#     ):
-#         new_settings = pd.DataFrame({
-#             "Odbiorca": current_customers,
-#             "Nacisk": "Normalny przydział" 
-#         })
+    if (
+        "customer_settings_df" not in st.session_state 
+        or st.session_state.customer_settings_df["Odbiorca"].tolist() != current_customers
+    ):
+        new_settings = pd.DataFrame({
+            "Odbiorca": current_customers,
+            "Nacisk": "Normalny przydział" 
+        })
         
-#         if "customer_settings_df" in st.session_state:
-#             old_settings = st.session_state.customer_settings_df
-#             mapping = dict(zip(old_settings["Odbiorca"], old_settings["Nacisk"]))
-#             new_settings["Nacisk"] = new_settings["Odbiorca"].map(lambda x: mapping.get(x, "Normalny przydział"))
+        if "customer_settings_df" in st.session_state:
+            old_settings = st.session_state.customer_settings_df
+            mapping = dict(zip(old_settings["Odbiorca"], old_settings["Nacisk"]))
+            new_settings["Nacisk"] = new_settings["Odbiorca"].map(lambda x: mapping.get(x, "Normalny przydział"))
         
-#         st.session_state.customer_settings_df = new_settings
+        st.session_state.customer_settings_df = new_settings
 
-#     edited_settings = st.data_editor(
-#         st.session_state.customer_settings_df,
-#         column_config={
-#             "Odbiorca": st.column_config.Column(disabled=True),
-#             "Nacisk": st.column_config.SelectboxColumn(
-#                 "Nacisk",
-#                 options=["Wymuś", "Normalny przydział", "Ogranicz", "Wykreśl"],
-#                 required=True,
-#                 default="Normalny przydział"
-#             )
-#         },
-#         use_container_width=True,
-#         hide_index=True,
-#         key="customer_settings_editor"
-#     )
+    edited_settings = st.data_editor(
+        st.session_state.customer_settings_df,
+        column_config={
+            "Odbiorca": st.column_config.Column(disabled=True),
+            "Nacisk": st.column_config.SelectboxColumn(
+                "Nacisk",
+                options=["Wymuś", "Normalny przydział", "Ogranicz", "Wykreśl"],
+                required=True,
+                default="Normalny przydział"
+            )
+        },
+        use_container_width=True,
+        hide_index=True,
+        key="customer_settings_editor"
+    )
 
-#     st.session_state.customer_settings_df = edited_settings
+    st.session_state.customer_settings_df = edited_settings
 
 
 # rozwiązanie
