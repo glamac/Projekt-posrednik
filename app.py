@@ -292,7 +292,7 @@ with tabs[0]:
         st.subheader("Koszty zakupu")
         edited_buy = st.data_editor(
             st.session_state.buy_cost_df,
-            num_rows="dynamic",
+            num_rows="fixed",
             use_container_width=True,
             key="buy_editor",
         )
@@ -314,7 +314,7 @@ with tabs[0]:
         st.subheader("Ceny sprzedaży")
         edited_sell = st.data_editor(
             st.session_state.sell_price_df,
-            num_rows="dynamic",
+            num_rows="fixed",
             use_container_width=True,
             key="sell_editor",
         )
@@ -346,6 +346,7 @@ with tabs[0]:
     )
     st.session_state.transport_df = edited_transport
 
+#USTAWIANIE BLOKADY NA DANE PARY RZECZYWISTE ODBIORCA-DOSTAWCA
 with tabs[1]:
     st.subheader("Blokowanie tras")
 
@@ -371,6 +372,51 @@ with tabs[1]:
         st.session_state.blocked_df, use_container_width=True, key="blocked_editor"
     )
     st.session_state.blocked_df = edited_blocked
+
+#DOBÓR STATUSU NACISKU NA ODBIORCĘ:
+#Wymuś - jak na zajęciach, sprowadza się do zablokowania fikcyjnego dostawcy dla tego odbiorcy i ustwienia temu odbiorcy wyższego priorytetu.
+#Normalny priorytet - traktowanie domyślne.
+#Ogranicz - niższy priorytet - obsługa pomiędzy normalnymi priorytetami, ale przed fikcyjnymi
+#Wykreśl - całkowicie blokuje jakiekolwiek rzeczywiste dostawy do tego rzeczywistego odbiorcy.
+#Na stan obecny zmiany w tabeli nie wpływają na obliczenia.
+# with tabs[1]:
+#     st.subheader("Blokowanie tras")
+
+#     current_customers = st.session_state.demand_df["Odbiorca"].unique().tolist()
+
+#     if (
+#         "customer_settings_df" not in st.session_state 
+#         or st.session_state.customer_settings_df["Odbiorca"].tolist() != current_customers
+#     ):
+#         new_settings = pd.DataFrame({
+#             "Odbiorca": current_customers,
+#             "Nacisk": "Normalny przydział" 
+#         })
+        
+#         if "customer_settings_df" in st.session_state:
+#             old_settings = st.session_state.customer_settings_df
+#             mapping = dict(zip(old_settings["Odbiorca"], old_settings["Nacisk"]))
+#             new_settings["Nacisk"] = new_settings["Odbiorca"].map(lambda x: mapping.get(x, "Normalny przydział"))
+        
+#         st.session_state.customer_settings_df = new_settings
+
+#     edited_settings = st.data_editor(
+#         st.session_state.customer_settings_df,
+#         column_config={
+#             "Odbiorca": st.column_config.Column(disabled=True),
+#             "Nacisk": st.column_config.SelectboxColumn(
+#                 "Nacisk",
+#                 options=["Wymuś", "Normalny przydział", "Ogranicz", "Wykreśl"],
+#                 required=True,
+#                 default="Normalny przydział"
+#             )
+#         },
+#         use_container_width=True,
+#         hide_index=True,
+#         key="customer_settings_editor"
+#     )
+
+#     st.session_state.customer_settings_df = edited_settings
 
 
 # rozwiązanie
@@ -504,7 +550,7 @@ with tabs[2]:
         with col2:
             st.metric("Popyt rzeczywisty", f"{sum(demand)}")
             st.metric("Popyt fikcyjny", f"{demand_final[-1]}")
-            st.metric("Popyt całkowita", f"{sum(demand_final)}")
+            st.metric("Popyt całkowity", f"{sum(demand_final)}")
         with col3:
-            st.metric("Liczba iteracji", f"{len(history) - 1}")
+            st.metric("Liczba iteracji", f"{len(history)}")
             st.metric("Maksymalny zysk", f"{total_profit:,.2f}")
