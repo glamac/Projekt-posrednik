@@ -223,6 +223,10 @@ def sync_demand_data():
                         new_blocked.loc[row, col] = current_blocked.iloc[i, j]
         st.session_state.blocked_df = new_blocked
 
+# ============================================================
+# POMOCNICZE
+# ============================================================
+
 
 # ============================================================
 # INICJALIZACJA DATAFRAME'ÓW W SESSION STATE
@@ -261,7 +265,9 @@ if "blocked_df" not in st.session_state:
     )
     st.session_state.blocked_df.index.name = "Dostawca\\Odbiorca"
 
+# ============================================================
 # UI
+# ============================================================
 
 st.title("Zagadnienie pośrednika")
 
@@ -274,11 +280,17 @@ tabs = st.tabs(
 )
 
 with tabs[0]:
+
+    if "should_rerun" not in st.session_state: st.session_state.should_rerun = False
     col1, col2 = st.columns(2)
 
     # KOLUMNA LEWA
     with col1:
+
+        #DOSTAWCY
         st.subheader("Podaż dostawców")
+        if "key_supply" not in st.session_state: st.session_state.key_supply = 0
+        supply_key = f"supply_editor{st.session_state.key_supply}"
         edited_supply = st.data_editor(
             st.session_state.supply_df,
             column_config={
@@ -289,19 +301,45 @@ with tabs[0]:
             hide_index=True,
             num_rows="dynamic",
             use_container_width=True,
-            key="supply_editor",
+            key=supply_key,
         )
-        if st.button("Zatwierdź dostawców",
-                    use_container_width=True,
-                    disabled=edited_supply.equals(st.session_state.supply_df),
-                    type="primary"
-                    ):
-            st.session_state.supply_df = edited_supply.reset_index(drop=True)
-            sync_supply_data()
-            st.rerun()
+
+        supply_not_changed = edited_supply.reset_index(drop=True).equals(st.session_state.supply_df.reset_index(drop=True))
+
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź dostawców",
+                        use_container_width=True,
+                        disabled=supply_not_changed,
+                        type="primary",
+                        key="confirm_supply",
+                        ):
+                st.session_state.supply_df = edited_supply.reset_index(drop=True)
+                sync_supply_data()
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        use_container_width=True,
+                        disabled=supply_not_changed,
+                        type="primary",
+                        key="cancel_supply"
+                        ):
+                st.session_state.key_supply += 1
+                st.session_state.should_rerun = True
+
+        with st.expander("Uwaga dotycząca synchronizacji danych"):
+            st.write("""
+                Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach. 
+                **Wszystkie niezatwierdzone zmiany w poniższych tabelach mogą przepaść:**
+                * Koszty zakupu
+                * Koszty transportu
+            """)
 
 
+        #KOSZTA ZAKUPU
         st.subheader("Koszty zakupu")
+        if "key_buy" not in st.session_state: st.session_state.key_buy = 0
+        buy_key=f"buy_editor{st.session_state.key_buy}"
         edited_buy = st.data_editor(
             st.session_state.buy_cost_df,
             column_config={
@@ -311,20 +349,39 @@ with tabs[0]:
             hide_index=True,
             num_rows="fixed",
             use_container_width=True,
-            key="buy_editor",
+            key=buy_key,
         )
-        if st.button("Zatwierdź koszty",
-                    use_container_width=True,
-                    disabled=edited_buy.equals(st.session_state.buy_cost_df),
-                    type="primary"
-                    ):
-            st.session_state.buy_cost_df = edited_buy.reset_index(drop=True)
-            st.rerun()
+
+        buy_not_changed = edited_buy.reset_index(drop=True).equals(st.session_state.buy_cost_df.reset_index(drop=True))
+
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź koszty",
+                        use_container_width=True,
+                        disabled=buy_not_changed,
+                        type="primary",
+                        key="confirm_buy"
+                        ):
+                st.session_state.buy_cost_df = edited_buy.reset_index(drop=True)
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        use_container_width=True,
+                        disabled=buy_not_changed,
+                        type="primary",
+                        key="cancel_buy"
+                        ):
+                st.session_state.key_buy += 1
+                st.session_state.should_rerun = True
 
 
     # KOLUMNA PRAWA
     with col2:
+
+        #ODBIORCY
         st.subheader("Popyt odbiorców")
+        if "key_demand" not in st.session_state: st.session_state.key_demand = 0
+        demand_key=f"demand_editor{st.session_state.key_demand}"
         edited_demand = st.data_editor(
             st.session_state.demand_df,
             column_config={
@@ -335,19 +392,46 @@ with tabs[0]:
             hide_index=True,
             num_rows="dynamic",
             use_container_width=True,
-            key="demand_editor",
+            key=demand_key,
         )
-        if st.button("Zatwierdź odbiorców",
-                    use_container_width=True,
-                    disabled=edited_demand.equals(st.session_state.demand_df),
-                    type="primary"
-                    ):
-            st.session_state.demand_df = edited_demand.reset_index(drop=True)
-            sync_demand_data()
-            st.rerun()
+        
+        demand_not_changed = edited_demand.reset_index(drop=True).equals(st.session_state.demand_df.reset_index(drop=True))
+        
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź odbiorców",
+                        use_container_width=True,
+                        disabled=demand_not_changed,
+                        type="primary",
+                        key="confirm_demand"
+                        ):
+                st.session_state.demand_df = edited_demand.reset_index(drop=True)
+                sync_demand_data()
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        use_container_width=True,
+                        disabled=demand_not_changed,
+                        type="primary",
+                        key="cancel_demand"
+                        ):
+                st.session_state.key_demand += 1
+                st.session_state.should_rerun = True
+       
+        with st.expander("Uwaga dotycząca synchronizacji danych"):
+            st.write("""
+                Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach. 
+                **Wszystkie niezatwierdzone zmiany w poniższych tabelach mogą przepaść:**
+                * Ceny sprzedaży
+                * Koszty transportu
+                * Blokowanie tras
+            """)
 
 
+        #CENY SPRZEDAŻY
         st.subheader("Ceny sprzedaży")
+        if "key_sell" not in st.session_state: st.session_state.key_sell = 0
+        sell_key=f"sell_editor{st.session_state.key_sell}"
         edited_sell = st.data_editor(
             st.session_state.sell_price_df,
             column_config={
@@ -357,17 +441,33 @@ with tabs[0]:
             hide_index=True,
             num_rows="fixed",
             use_container_width=True,
-            key="sell_editor",
+            key=sell_key,
         )
-        if st.button("Zatwierdź ceny",
-                    use_container_width=True,
-                    disabled=edited_sell.equals(st.session_state.sell_price_df),
-                    type="primary"
-                    ):
-            st.session_state.sell_price_df = edited_sell.reset_index(drop=True)
-            st.rerun()
+
+        sell_not_changed = edited_sell.reset_index(drop=True).equals(st.session_state.sell_price_df.reset_index(drop=True))
+
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź ceny",
+                        use_container_width=True,
+                        disabled=sell_not_changed,
+                        type="primary",
+                        key="confirm_sell"
+                        ):
+                st.session_state.sell_price_df = edited_sell.reset_index(drop=True)
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        use_container_width=True,
+                        disabled=sell_not_changed,
+                        type="primary",
+                        key="cancel_sell"
+                        ):
+                st.session_state.key_sell += 1
+                st.session_state.should_rerun = True
         
 
+    #KOSZTY TRANSPORTU
     st.subheader("Koszty transportu")
 
     # Synchronizacja macierzy przed wyświetleniem
@@ -405,6 +505,10 @@ with tabs[0]:
             st.session_state.transport_df = edited_transport
             st.rerun()
 
+    #ODŚWIEŻ
+    if st.session_state.should_rerun:
+        st.session_state.should_rerun = False
+        st.rerun()
 
 #USTAWIANIE BLOKADY NA DANE PARY RZECZYWISTE ODBIORCA-DOSTAWCA
 # with tabs[1]:
@@ -482,6 +586,16 @@ with tabs[1]:
                     ):
             st.session_state.customer_settings_df = edited_settings
             st.rerun()
+
+    with st.expander("Opis dostępnych nacisków"):
+            st.write("""
+                Priorytet określa kolejność przypisywania zasobów do tras podczas obliczeń algorytmu. Bloki o określonych priorytetach są analizowane od tych z najwyższym priorytetem do tych z najniższym. 
+                Fikcyjni dostawcy i odbiorcy zawsze mają trasy o najniższym priorytecie.
+                * Wymuś - dany odbiorca będzie miał wysoki priorytet, a wszelkie dostawy od fikcyjnego dostawcy będą w jego przypadku uznane za skrajnie niekorzystne.
+                * Normalny priorytet - dany odbiorca będzie miał normalny priorytet.
+                * Ogranicz - dany odbiorca będzie miał niższy priorytet - będzie obsługiwany po odbiorcach z normalnym priorytetem, ale przed fikcyjnymi.
+                * Wykreśl - rzeczywiści dostawcy będą mieć rzeczywiste zyski z tras do tego odbiorcy traktowane jako skrajnie niekorzystne.
+            """)
 
 
 # rozwiązanie
