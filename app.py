@@ -113,7 +113,6 @@ def improve_solution(allocation, base_ones, cycle):
     base_ones[cycle[0][0]][cycle[0][1]] = True
     removed = False
     for (i, j) in cycle[1::2]:
-        # Musimy usunąć dokładnie jedną komórkę, która stała się zerem
         if allocation[i][j] == 0:
             base_ones[i][j] = False
             removed = True
