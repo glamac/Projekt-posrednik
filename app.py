@@ -598,11 +598,9 @@ with tabs[0]:
 #     st.session_state.blocked_df = edited_blocked
 
 #DOBÓR STATUSU NACISKU NA ODBIORCĘ:
-#Wymuś - jak na zajęciach, sprowadza się do zablokowania fikcyjnego dostawcy dla tego odbiorcy i ustwienia temu odbiorcy wyższego priorytetu.
+#Wymuś - jak na zajęciach, sprowadza się do zablokowania fikcyjnego dostawcy dla tego odbiorcy.
 #Normalny priorytet - traktowanie domyślne.
-#Ogranicz - niższy priorytet - obsługa pomiędzy normalnymi priorytetami, ale przed fikcyjnymi.
 #Wykreśl - całkowicie blokuje jakiekolwiek rzeczywiste dostawy do tego rzeczywistego odbiorcy.
-#Na stan obecny zmiany w tabeli nie wpływają na obliczenia.
 with tabs[1]:
     st.subheader("Blokowanie tras")
     if "key_settings" not in st.session_state: st.session_state.key_settings = 0
@@ -633,7 +631,7 @@ with tabs[1]:
             "Odbiorca": st.column_config.Column(disabled=True),
             "Nacisk": st.column_config.SelectboxColumn(
                 "Nacisk",
-                options=["Wymuś", "Normalny przydział", "Ogranicz", "Wykreśl"],
+                options=["Wymuś", "Normalny przydział", "Wykreśl"],
                 required=True,
                 default="Normalny przydział"
             )
@@ -678,11 +676,8 @@ with tabs[1]:
 
     with st.expander("Opis dostępnych nacisków"):
             st.write("""
-                Priorytet określa kolejność przypisywania zasobów do tras podczas obliczeń algorytmu. Bloki o określonych priorytetach są analizowane od tych z najwyższym priorytetem do tych z najniższym. 
-                Fikcyjni dostawcy i odbiorcy zawsze mają trasy o najniższym priorytecie.
-                * Wymuś - dany odbiorca będzie miał wysoki priorytet, a wszelkie dostawy od fikcyjnego dostawcy będą w jego przypadku uznane za skrajnie niekorzystne.
+                * Wymuś - dany odbiorca będzie miał wysoki priorytet - wszelkie dostawy od fikcyjnego dostawcy będą w jego przypadku uznane za skrajnie niekorzystne.
                 * Normalny priorytet - dany odbiorca będzie miał normalny priorytet.
-                * Ogranicz - dany odbiorca będzie miał niższy priorytet - będzie obsługiwany po odbiorcach z normalnym priorytetem, ale przed fikcyjnymi.
                 * Wykreśl - rzeczywiści dostawcy będą mieć rzeczywiste zyski z tras do tego odbiorcy traktowane jako skrajnie niekorzystne.
             """)
 
@@ -691,7 +686,7 @@ with tabs[1]:
 
 
 def prepare_with_fictitious(
-    supply, demand, buy_cost, sell_price, transport, blocked, supply_names, demand_names
+    supply, demand, buy_cost, sell_price, transport, supply_names, demand_names, pressure
 ):
     """Zawsze dodaje fikcyjnego dostawcę i fikcyjnego odbiorcę"""
     n_s = len(supply)
@@ -710,8 +705,8 @@ def prepare_with_fictitious(
     for i in range(n_s):
         for j in range(n_d):
             z[i, j] = sell_price[j] - buy_cost[i] - transport[i, j]
-            if blocked[i, j]:
-                z[i, j] = -1e9
+            # if blocked[i, j]:
+            #     z[i, j] = -1e9
 
     # Fikcyjny odbiorca
     fictional_demand = max(0, total_supply)
@@ -724,6 +719,18 @@ def prepare_with_fictitious(
     supply_final.append(fictional_supply)
     supply_names_final.append("DF (Fikcyjny)")
     z = np.vstack([z, np.zeros((1, len(demand_final)))])
+
+    # Nacisk - wykreślanie i wymuszanie tras
+    for j in range(n_d):
+            match pressure[j]:
+                case "Wymuś":
+                    z[n_s][j] = -1e9
+                case "Wykreśl":
+                    for i in range(n_s):
+                        z[i][j] = -1e9
+                case "Normalny priorytet" | _:
+                    continue
+
 
     return z, supply_final, demand_final, supply_names_final, demand_names_final
 
@@ -739,7 +746,8 @@ with tabs[2]:
         sell_price = st.session_state.sell_price_df["Cena sprzedaży"].tolist()
 
         transport = st.session_state.transport_df.values
-        blocked = st.session_state.blocked_df.values
+        #blocked = st.session_state.blocked_df.values
+        pressure = st.session_state.customer_settings_df["Nacisk"].tolist()
 
         supply_names = st.session_state.supply_df["Dostawca"].tolist()
         demand_names = st.session_state.demand_df["Odbiorca"].tolist()
@@ -751,9 +759,9 @@ with tabs[2]:
                 buy_cost,
                 sell_price,
                 transport,
-                blocked,
                 supply_names,
                 demand_names,
+                pressure
             )
         )
 
@@ -831,7 +839,7 @@ with tabs[3]:
         st.text("\nProgram służy do rozwiązywania zagadnienia transportowego pośrednika dla wprowadzanych danych dostawców, odbiorców, kosztów transportu i priorytetów odbiorców. " \
         "Istotą zagadnienia jest takie rozłożenie transportu między określonymi dostawcami a odbiorcami, aby zysk z transportu był dla pośrednika kupującego od danych dostawców i sprzedającego danym odbiorcom jak najwyższy. " \
         "\n\n" \
-        "Uwzględnione mogą być również pewne naciski takie jak kontrakty o całkowitym zaspokojeniu popytu danego odbiorcy czy spychanie danego odbiorcy na najniższy priorytet ze względów bezpieczeństwa. " \
+        "Uwzględnione mogą być również pewne naciski takie jak kontrakty o całkowitym zaspokojeniu popytu danego odbiorcy. " \
         "Można też uwzględnić całkowitą blokadę odbiorcy, co sprawi, że cała dostawa dla niego spadnie na fikcyjnego dostawcę. " \
         "Narzędzia te są dostępne w sekcji \"Blokada tras\". " \
         "Ta wersja programu nie uwzględnie blokad i priorytetów na dostawcach. " \
