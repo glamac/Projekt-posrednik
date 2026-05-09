@@ -469,6 +469,8 @@ with tabs[0]:
 
     #KOSZTY TRANSPORTU
     st.subheader("Koszty transportu")
+    if "key_transport" not in st.session_state: st.session_state.key_transport = 0
+    transport_key=f"transport_editor{st.session_state.key_transport}"
 
     # Synchronizacja macierzy przed wyświetleniem
     current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
@@ -492,23 +494,39 @@ with tabs[0]:
     edited_transport = st.data_editor(
         st.session_state.transport_df,
         column_config={
-            "Dostawca\Odbiorca": st.column_config.Column(disabled=True)
+            "_index": st.column_config.Column("Dostawca/Odbiorca", disabled=True)
         },
         use_container_width=True, 
-        key="transport_editor"
+        key=transport_key,
     )
-    if st.button("Zatwierdź koszta transportu",
+
+    transport_not_changed = edited_transport.reset_index(drop=True).equals(st.session_state.transport_df.reset_index(drop=True))
+
+    B1, B2 = st.columns(2)
+    with B1:
+        if st.button("Zatwierdź koszta transportu",
                     use_container_width=True,
-                    disabled=edited_transport.equals(st.session_state.transport_df),
-                    type="primary"
+                    disabled=transport_not_changed,
+                    type="primary",
+                    key="confirm_transport"
                     ):
             st.session_state.transport_df = edited_transport
-            st.rerun()
+            st.session_state.should_rerun = True
+    with B2:
+        if st.button("Anuluj zmiany",
+                    use_container_width=True,
+                    disabled=transport_not_changed,
+                    type="primary",
+                    key="cancel_transport"
+                    ):
+            st.session_state.key_transport += 1
+            st.session_state.should_rerun = True
 
-    #ODŚWIEŻ
+    #ODŚWIEŻ (jeśli są zatwierdzone zmiany)
     if st.session_state.should_rerun:
         st.session_state.should_rerun = False
         st.rerun()
+
 
 #USTAWIANIE BLOKADY NA DANE PARY RZECZYWISTE ODBIORCA-DOSTAWCA
 # with tabs[1]:
@@ -545,6 +563,8 @@ with tabs[0]:
 #Na stan obecny zmiany w tabeli nie wpływają na obliczenia.
 with tabs[1]:
     st.subheader("Blokowanie tras")
+    if "key_settings" not in st.session_state: st.session_state.key_settings = 0
+    settings_key=f"customer_settings_editor{st.session_state.key_settings}"
 
     current_customers = st.session_state.demand_df["Odbiorca"].tolist()
 
@@ -567,6 +587,7 @@ with tabs[1]:
     edited_settings = st.data_editor(
         st.session_state.customer_settings_df,
         column_config={
+            "_index": st.column_config.Column("Indeks", disabled=True),
             "Odbiorca": st.column_config.Column(disabled=True),
             "Nacisk": st.column_config.SelectboxColumn(
                 "Nacisk",
@@ -577,14 +598,40 @@ with tabs[1]:
         },
         use_container_width=True,
         hide_index=True,
-        key="customer_settings_editor"
+        key=settings_key
     )
-    if st.button("Zatwierdź blokady",
+
+    settings_not_changed = edited_settings.reset_index(drop=True).equals(st.session_state.customer_settings_df.reset_index(drop=True))
+    is_already_reset = (edited_settings["Nacisk"]  == "Normalny przydział").all()
+
+    B1, B2, B3 = st.columns(3)
+    with B1:
+        if st.button("Zatwierdź blokady",
                     use_container_width=True,
-                    disabled=edited_settings.equals(st.session_state.customer_settings_df),
-                    type="primary"
+                    disabled=settings_not_changed,
+                    type="primary",
+                    key="confirm_settings"
                     ):
             st.session_state.customer_settings_df = edited_settings
+            st.rerun()
+    with B2:
+        if st.button("Resetuj blokady",
+                    use_container_width=True,
+                    disabled=is_already_reset, 
+                    type="primary",
+                    key="reset_settings"
+                    ):
+            st.session_state.customer_settings_df["Nacisk"] = "Normalny przydział"
+            st.session_state.key_settings += 1
+            st.rerun()
+    with B3:
+        if st.button("Anuluj zmiany",
+                    use_container_width=True,
+                    disabled=settings_not_changed,
+                    type="primary",
+                    key="cancel_settings"
+                    ):
+            st.session_state.key_settings += 1
             st.rerun()
 
     with st.expander("Opis dostępnych nacisków"):
