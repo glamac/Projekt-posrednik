@@ -223,6 +223,10 @@ def sync_demand_data():
                         new_blocked.loc[row, col] = current_blocked.iloc[i, j]
         st.session_state.blocked_df = new_blocked
 
+# ============================================================
+# POMOCNICZE
+# ============================================================
+
 
 # ============================================================
 # INICJALIZACJA DATAFRAME'ÓW W SESSION STATE
@@ -261,7 +265,9 @@ if "blocked_df" not in st.session_state:
     )
     st.session_state.blocked_df.index.name = "Dostawca\\Odbiorca"
 
+# ============================================================
 # UI
+# ============================================================
 
 st.title("Zagadnienie pośrednika")
 
@@ -270,59 +276,206 @@ tabs = st.tabs(
         "Dane dostawców i odbiorców",
         "Blokowanie tras",
         "Rozwiązanie",
+        "Opis programu",
     ]
 )
 
 with tabs[0]:
+
+    if "should_rerun" not in st.session_state: st.session_state.should_rerun = False
     col1, col2 = st.columns(2)
 
     # KOLUMNA LEWA
     with col1:
+
+        #DOSTAWCY
         st.subheader("Podaż dostawców")
+        if "key_supply" not in st.session_state: st.session_state.key_supply = 0
+        supply_key = f"supply_editor{st.session_state.key_supply}"
         edited_supply = st.data_editor(
             st.session_state.supply_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Dostawca": st.column_config.TextColumn(required=True, validate=r"^.{1,}$"),
+                "Podaż": st.column_config.NumberColumn(format="%.2f", required=True)
+            },
+            hide_index=True,
             num_rows="dynamic",
             use_container_width=True,
-            key="supply_editor",
+            key=supply_key,
         )
-        if not edited_supply.equals(st.session_state.supply_df):
-            st.session_state.supply_df = edited_supply
-            sync_supply_data()
 
+        supply_not_changed = edited_supply.reset_index(drop=True).equals(st.session_state.supply_df.reset_index(drop=True))
+
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź dostawców",
+                        use_container_width=True,
+                        disabled=supply_not_changed,
+                        type="primary",
+                        key="confirm_supply",
+                        ):
+                st.session_state.supply_df = edited_supply.reset_index(drop=True)
+                sync_supply_data()
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        use_container_width=True,
+                        disabled=supply_not_changed,
+                        type="primary",
+                        key="cancel_supply"
+                        ):
+                st.session_state.key_supply += 1
+                st.session_state.should_rerun = True
+
+        with st.expander("Uwaga dotycząca synchronizacji danych"):
+            st.write("""
+                Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach. 
+                **Wszystkie niezatwierdzone zmiany w poniższych tabelach mogą przepaść:**
+                * Koszty zakupu
+                * Koszty transportu
+            """)
+
+
+        #KOSZTA ZAKUPU
         st.subheader("Koszty zakupu")
+        if "key_buy" not in st.session_state: st.session_state.key_buy = 0
+        buy_key=f"buy_editor{st.session_state.key_buy}"
         edited_buy = st.data_editor(
             st.session_state.buy_cost_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Dostawca": st.column_config.Column(disabled=True),
+                "Koszt zakupu": st.column_config.NumberColumn(format="%.2f", required=True)
+            },
+            hide_index=True,
             num_rows="fixed",
             use_container_width=True,
-            key="buy_editor",
+            key=buy_key,
         )
-        st.session_state.buy_cost_df = edited_buy
+
+        buy_not_changed = edited_buy.reset_index(drop=True).equals(st.session_state.buy_cost_df.reset_index(drop=True))
+
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź koszty",
+                        use_container_width=True,
+                        disabled=buy_not_changed,
+                        type="primary",
+                        key="confirm_buy"
+                        ):
+                st.session_state.buy_cost_df = edited_buy.reset_index(drop=True)
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        use_container_width=True,
+                        disabled=buy_not_changed,
+                        type="primary",
+                        key="cancel_buy"
+                        ):
+                st.session_state.key_buy += 1
+                st.session_state.should_rerun = True
+
 
     # KOLUMNA PRAWA
     with col2:
+
+        #ODBIORCY
         st.subheader("Popyt odbiorców")
+        if "key_demand" not in st.session_state: st.session_state.key_demand = 0
+        demand_key=f"demand_editor{st.session_state.key_demand}"
         edited_demand = st.data_editor(
             st.session_state.demand_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Odbiorca": st.column_config.TextColumn(required=True, validate=r"^.{1,}$"),
+                "Popyt": st.column_config.NumberColumn(format="%.2f", required=True)
+            },
+            hide_index=True,
             num_rows="dynamic",
             use_container_width=True,
-            key="demand_editor",
+            key=demand_key,
         )
-        if not edited_demand.equals(st.session_state.demand_df):
-            st.session_state.demand_df = edited_demand
-            sync_demand_data()
+        
+        demand_not_changed = edited_demand.reset_index(drop=True).equals(st.session_state.demand_df.reset_index(drop=True))
+        
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź odbiorców",
+                        use_container_width=True,
+                        disabled=demand_not_changed,
+                        type="primary",
+                        key="confirm_demand"
+                        ):
+                st.session_state.demand_df = edited_demand.reset_index(drop=True)
+                sync_demand_data()
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        use_container_width=True,
+                        disabled=demand_not_changed,
+                        type="primary",
+                        key="cancel_demand"
+                        ):
+                st.session_state.key_demand += 1
+                st.session_state.should_rerun = True
+       
+        with st.expander("Uwaga dotycząca synchronizacji danych"):
+            st.write("""
+                Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach. 
+                **Wszystkie niezatwierdzone zmiany w poniższych tabelach mogą przepaść:**
+                * Ceny sprzedaży
+                * Koszty transportu
+                * Blokowanie tras
+            """)
 
+
+        #CENY SPRZEDAŻY
         st.subheader("Ceny sprzedaży")
+        if "key_sell" not in st.session_state: st.session_state.key_sell = 0
+        sell_key=f"sell_editor{st.session_state.key_sell}"
         edited_sell = st.data_editor(
             st.session_state.sell_price_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Odbiorca": st.column_config.Column(disabled=True),
+                "Cena sprzedaży": st.column_config.NumberColumn(format="%.2f", required=True)
+            },
+            hide_index=True,
             num_rows="fixed",
             use_container_width=True,
-            key="sell_editor",
+            key=sell_key,
         )
-        st.session_state.sell_price_df = edited_sell
 
+        sell_not_changed = edited_sell.reset_index(drop=True).equals(st.session_state.sell_price_df.reset_index(drop=True))
+
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź ceny",
+                        use_container_width=True,
+                        disabled=sell_not_changed,
+                        type="primary",
+                        key="confirm_sell"
+                        ):
+                st.session_state.sell_price_df = edited_sell.reset_index(drop=True)
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        use_container_width=True,
+                        disabled=sell_not_changed,
+                        type="primary",
+                        key="cancel_sell"
+                        ):
+                st.session_state.key_sell += 1
+                st.session_state.should_rerun = True
+        
+
+    #KOSZTY TRANSPORTU
     st.subheader("Koszty transportu")
+    if "key_transport" not in st.session_state: st.session_state.key_transport = 0
+    transport_key=f"transport_editor{st.session_state.key_transport}"
 
-    # Upewnij się, że macierz jest zsynchronizowana przed wyświetleniem
+    # Synchronizacja macierzy przed wyświetleniem
     current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
     current_customers = st.session_state.demand_df["Odbiorca"].tolist()
 
@@ -330,93 +483,177 @@ with tabs[0]:
         st.session_state.transport_df.index.tolist() != current_suppliers
         or st.session_state.transport_df.columns.tolist() != current_customers
     ):
-        new_transport = pd.DataFrame(
-            0, index=current_suppliers, columns=current_customers
+        st.session_state.transport_df = (
+            st.session_state.transport_df
+            .reindex(index=current_suppliers, columns=current_customers, fill_value=0.0)
         )
-        old_transport = st.session_state.transport_df
-        for i, row in enumerate(old_transport.index):
-            if row in current_suppliers:
-                for j, col in enumerate(old_transport.columns):
-                    if col in current_customers:
-                        new_transport.loc[row, col] = old_transport.iloc[i, j]
-        st.session_state.transport_df = new_transport
+        # new_transport = pd.DataFrame(
+        #     0, index=current_suppliers, columns=current_customers
+        # )
+        # old_transport = st.session_state.transport_df
+        # for i, row in enumerate(old_transport.index):
+        #     if row in current_suppliers:
+        #         for j, col in enumerate(old_transport.columns):
+        #             if col in current_customers:
+        #                 new_transport.loc[row, col] = old_transport.iloc[i, j]
+        # st.session_state.transport_df = new_transport
+
+    transport_config = {
+        col: st.column_config.NumberColumn(format="%.2f", required=True) 
+        for col in current_customers
+    }
+    transport_config["_index"] = st.column_config.Column("Dostawca\Odbiorca", disabled=True)
 
     edited_transport = st.data_editor(
-        st.session_state.transport_df, use_container_width=True, key="transport_editor"
+        st.session_state.transport_df,
+        column_config=transport_config,
+        use_container_width=True, 
+        key=transport_key,
     )
-    st.session_state.transport_df = edited_transport
+
+    transport_not_changed = edited_transport.reset_index(drop=True).equals(st.session_state.transport_df.reset_index(drop=True))
+
+    B1, B2 = st.columns(2)
+    with B1:
+        if st.button("Zatwierdź koszta transportu",
+                    use_container_width=True,
+                    disabled=transport_not_changed,
+                    type="primary",
+                    key="confirm_transport"
+                    ):
+            st.session_state.transport_df = edited_transport
+            st.session_state.should_rerun = True
+    with B2:
+        if st.button("Anuluj zmiany",
+                    use_container_width=True,
+                    disabled=transport_not_changed,
+                    type="primary",
+                    key="cancel_transport"
+                    ):
+            st.session_state.key_transport += 1
+            st.session_state.should_rerun = True
+
+    #ODŚWIEŻ (jeśli są zatwierdzone zmiany)
+    if st.session_state.should_rerun:
+        st.session_state.should_rerun = False
+        st.rerun()
+
 
 #USTAWIANIE BLOKADY NA DANE PARY RZECZYWISTE ODBIORCA-DOSTAWCA
-with tabs[1]:
-    st.subheader("Blokowanie tras")
+# with tabs[1]:
+#     st.subheader("Blokowanie tras")
 
-    current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
-    current_customers = st.session_state.demand_df["Odbiorca"].tolist()
+#     current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
+#     current_customers = st.session_state.demand_df["Odbiorca"].tolist()
 
-    if (
-        st.session_state.blocked_df.index.tolist() != current_suppliers
-        or st.session_state.blocked_df.columns.tolist() != current_customers
-    ):
-        new_blocked = pd.DataFrame(
-            False, index=current_suppliers, columns=current_customers
-        )
-        old_blocked = st.session_state.blocked_df
-        for i, row in enumerate(old_blocked.index):
-            if row in current_suppliers:
-                for j, col in enumerate(old_blocked.columns):
-                    if col in current_customers:
-                        new_blocked.loc[row, col] = old_blocked.iloc[i, j]
-        st.session_state.blocked_df = new_blocked
+#     if (
+#         st.session_state.blocked_df.index.tolist() != current_suppliers
+#         or st.session_state.blocked_df.columns.tolist() != current_customers
+#     ):
+#         new_blocked = pd.DataFrame(
+#             False, index=current_suppliers, columns=current_customers
+#         )
+#         old_blocked = st.session_state.blocked_df
+#         for i, row in enumerate(old_blocked.index):
+#             if row in current_suppliers:
+#                 for j, col in enumerate(old_blocked.columns):
+#                     if col in current_customers:
+#                         new_blocked.loc[row, col] = old_blocked.iloc[i, j]
+#         st.session_state.blocked_df = new_blocked
 
-    edited_blocked = st.data_editor(
-        st.session_state.blocked_df, use_container_width=True, key="blocked_editor"
-    )
-    st.session_state.blocked_df = edited_blocked
+#     edited_blocked = st.data_editor(
+#         st.session_state.blocked_df, use_container_width=True, key="blocked_editor"
+#     )
+#     st.session_state.blocked_df = edited_blocked
 
 #DOBÓR STATUSU NACISKU NA ODBIORCĘ:
 #Wymuś - jak na zajęciach, sprowadza się do zablokowania fikcyjnego dostawcy dla tego odbiorcy i ustwienia temu odbiorcy wyższego priorytetu.
 #Normalny priorytet - traktowanie domyślne.
-#Ogranicz - niższy priorytet - obsługa pomiędzy normalnymi priorytetami, ale przed fikcyjnymi
+#Ogranicz - niższy priorytet - obsługa pomiędzy normalnymi priorytetami, ale przed fikcyjnymi.
 #Wykreśl - całkowicie blokuje jakiekolwiek rzeczywiste dostawy do tego rzeczywistego odbiorcy.
 #Na stan obecny zmiany w tabeli nie wpływają na obliczenia.
-# with tabs[1]:
-#     st.subheader("Blokowanie tras")
+with tabs[1]:
+    st.subheader("Blokowanie tras")
+    if "key_settings" not in st.session_state: st.session_state.key_settings = 0
+    settings_key=f"customer_settings_editor{st.session_state.key_settings}"
 
-#     current_customers = st.session_state.demand_df["Odbiorca"].unique().tolist()
+    current_customers = st.session_state.demand_df["Odbiorca"].tolist()
 
-#     if (
-#         "customer_settings_df" not in st.session_state 
-#         or st.session_state.customer_settings_df["Odbiorca"].tolist() != current_customers
-#     ):
-#         new_settings = pd.DataFrame({
-#             "Odbiorca": current_customers,
-#             "Nacisk": "Normalny przydział" 
-#         })
+    if (
+        "customer_settings_df" not in st.session_state 
+        or st.session_state.customer_settings_df["Odbiorca"].tolist() != current_customers
+    ):
+        new_settings = pd.DataFrame({
+            "Odbiorca": current_customers,
+            "Nacisk": "Normalny przydział" 
+        })
         
-#         if "customer_settings_df" in st.session_state:
-#             old_settings = st.session_state.customer_settings_df
-#             mapping = dict(zip(old_settings["Odbiorca"], old_settings["Nacisk"]))
-#             new_settings["Nacisk"] = new_settings["Odbiorca"].map(lambda x: mapping.get(x, "Normalny przydział"))
+        if "customer_settings_df" in st.session_state:
+            old_settings = st.session_state.customer_settings_df
+            mapping = dict(zip(old_settings["Odbiorca"], old_settings["Nacisk"]))
+            new_settings["Nacisk"] = new_settings["Odbiorca"].map(lambda x: mapping.get(x, "Normalny przydział"))
         
-#         st.session_state.customer_settings_df = new_settings
+        st.session_state.customer_settings_df = new_settings
 
-#     edited_settings = st.data_editor(
-#         st.session_state.customer_settings_df,
-#         column_config={
-#             "Odbiorca": st.column_config.Column(disabled=True),
-#             "Nacisk": st.column_config.SelectboxColumn(
-#                 "Nacisk",
-#                 options=["Wymuś", "Normalny przydział", "Ogranicz", "Wykreśl"],
-#                 required=True,
-#                 default="Normalny przydział"
-#             )
-#         },
-#         use_container_width=True,
-#         hide_index=True,
-#         key="customer_settings_editor"
-#     )
+    edited_settings = st.data_editor(
+        st.session_state.customer_settings_df,
+        column_config={
+            "_index": st.column_config.Column("Indeks", disabled=True),
+            "Odbiorca": st.column_config.Column(disabled=True),
+            "Nacisk": st.column_config.SelectboxColumn(
+                "Nacisk",
+                options=["Wymuś", "Normalny przydział", "Ogranicz", "Wykreśl"],
+                required=True,
+                default="Normalny przydział"
+            )
+        },
+        use_container_width=True,
+        hide_index=True,
+        key=settings_key
+    )
 
-#     st.session_state.customer_settings_df = edited_settings
+    settings_not_changed = edited_settings.reset_index(drop=True).equals(st.session_state.customer_settings_df.reset_index(drop=True))
+    is_already_reset = (edited_settings["Nacisk"]  == "Normalny przydział").all()
+
+    B1, B2, B3 = st.columns(3)
+    with B1:
+        if st.button("Zatwierdź blokady",
+                    use_container_width=True,
+                    disabled=settings_not_changed,
+                    type="primary",
+                    key="confirm_settings"
+                    ):
+            st.session_state.customer_settings_df = edited_settings
+            st.rerun()
+    with B2:
+        if st.button("Resetuj blokady",
+                    use_container_width=True,
+                    disabled=is_already_reset, 
+                    type="primary",
+                    key="reset_settings"
+                    ):
+            st.session_state.customer_settings_df["Nacisk"] = "Normalny przydział"
+            st.session_state.key_settings += 1
+            st.rerun()
+    with B3:
+        if st.button("Anuluj zmiany",
+                    use_container_width=True,
+                    disabled=settings_not_changed,
+                    type="primary",
+                    key="cancel_settings"
+                    ):
+            st.session_state.key_settings += 1
+            st.rerun()
+
+    with st.expander("Opis dostępnych nacisków"):
+            st.write("""
+                Priorytet określa kolejność przypisywania zasobów do tras podczas obliczeń algorytmu. Bloki o określonych priorytetach są analizowane od tych z najwyższym priorytetem do tych z najniższym. 
+                Fikcyjni dostawcy i odbiorcy zawsze mają trasy o najniższym priorytecie.
+                * Wymuś - dany odbiorca będzie miał wysoki priorytet, a wszelkie dostawy od fikcyjnego dostawcy będą w jego przypadku uznane za skrajnie niekorzystne.
+                * Normalny priorytet - dany odbiorca będzie miał normalny priorytet.
+                * Ogranicz - dany odbiorca będzie miał niższy priorytet - będzie obsługiwany po odbiorcach z normalnym priorytetem, ale przed fikcyjnymi.
+                * Wykreśl - rzeczywiści dostawcy będą mieć rzeczywiste zyski z tras do tego odbiorcy traktowane jako skrajnie niekorzystne.
+            """)
 
 
 # rozwiązanie
@@ -554,3 +791,44 @@ with tabs[2]:
         with col3:
             st.metric("Liczba iteracji", f"{len(history)}")
             st.metric("Maksymalny zysk", f"{total_profit:,.2f}")
+
+
+with tabs[3]:
+    st.subheader("Opis działania programu")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.text("\nProgram służy do rozwiązywania zagadnienia transportowego pośrednika dla wprowadzanych danych dostawców, odbiorców, kosztów transportu i priorytetów odbiorców. " \
+        "Istotą zagadnienia jest takie rozłożenie transportu między określonymi dostawcami a odbiorcami, aby zysk z transportu był dla pośrednika kupującego od danych dostawców i sprzedającego danym odbiorcom jak najwyższy. " \
+        "\n\n" \
+        "Uwzględnione mogą być również pewne naciski takie jak kontrakty o całkowitym zaspokojeniu popytu danego odbiorcy czy spychanie danego odbiorcy na najniższy priorytet ze względów bezpieczeństwa. " \
+        "Można też uwzględnić całkowitą blokadę odbiorcy, co sprawi, że cała dostawa dla niego spadnie na fikcyjnego dostawcę. " \
+        "Narzędzia te są dostępne w sekcji \"Blokada tras\". " \
+        "Ta wersja programu nie uwzględnie blokad i priorytetów na dostawcach. " \
+        "\n\n" \
+        "Program wykorzystuje podczas obliczeń metodę wierzchołka północno-zachodniego. Określa ona kolejność dobierania tras wewnątrz bloków o danym priorytecie. " \
+        "Wybierana jest najpierw trasa w górnym lewym rogu bloku, następnie zaś wybierane są kolejno trasy sąsienie po prawej lub poniżej, zależnie od tego czy zużyty został popyt czy podaż. " \
+        "Aby zrównoważyć całkowity popyt i podaż dla wariantów niezbilansowanych dodani są fikcyjni dostawcy i odbiorcy. Zawsze mają oni najniższy priorytet. " \
+        "Program pozwala przeanalizować cały proces obliczeniowy dzięki możliwości analizy tabel będących wynikami kolejnych iteracji algorytmu. " \
+        "W tym programie uwzględnia się tylko zagadnienie pojedynczego pośrednika z bezpośrednimi dostawami od dostawców do odbiorców. " \
+        "\n\n" \
+        "Aby przeprowadzić obliczenia najpierw uzupełnij dane w sekcji \"Dane dostawców i odbiorców\". " \
+        "Tabele zawierają już pewne przykładowe dane. Dla zaawansowanych badań można podawać ujemne popyt, podaż, ceny i koszta. Nazwy dostawców i odbiorców muszą być unikatowe i mieć przynajmniej 1 znak. " \
+        "Dane, które wprowadzasz nie zostaną wprowadzone do systemu a inne tabele nie zostaną o nie zaktualizowane dopóki nie zatwierdzisz zmian. " \
+        "Zatwierdzenie zmian w tabelach dotyczącyh odbiorców lub dostawców spowoduje utratę niezatwierdzonyc zmian w tabelach używających tych danych, jeśli liczba odbiorców lub dostawców ulegnie zmianie. " \
+        "Aby usunąć dostawców lub odbiorców zaznacz ich w komórkach lewej kolumny danej tabeli a następnie wciśniej klawisz DELETE. Możesz anulować wprowadzone zmiany klikając odpowiedni przycisk. " \
+        "Po wypełnieniu danych możesz wejść do sekcji \"Blokada tras\" i wybrać naciski na wybranych odbiorców. Opisy poszczególnych nacisków znajdują się w rozwijanej legndzie tej sekcji. " \
+        "\n\n" \
+        "Gdy wszystkie dane będą gotowe wejdź do sekcji \"Rozwiązanie\" i kliknij przycisk \"Oblicz plan\". Uzyskasz optymalny plan dostaw z najlepszym zyskiem dla zadanych nacisków. " \
+        "Będziesz mieć też rozwijany wgląd w wyniki w kolejnych iteracjach algorytmu. Na dole strony znajdzie się podsumowanie z kluczowymi wartościami liczbowymi." \
+        "\n\n" \
+        "Życzymy miłego użytkowania!" \
+        "\n\n" \
+        "Twórcy:" \
+        "\n-> XYZ" \
+        "\n-> XYZ" \
+        "\n-> XYZ" \
+        "\n-> XYZ" \
+        "\n-> XYZ" \
+        "\nProjekt wykorzystuje framework Streamlit." \
+        "\n\n" \
+        "")
