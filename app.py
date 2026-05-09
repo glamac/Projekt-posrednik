@@ -306,12 +306,13 @@ with tabs[0]:
         )
 
         supply_not_changed = edited_supply.reset_index(drop=True).equals(st.session_state.supply_df.reset_index(drop=True))
+        supply_is_not_unique = not edited_supply["Dostawca"].is_unique
 
         B1, B2 = st.columns(2)
         with B1:
             if st.button("Zatwierdź dostawców",
                         use_container_width=True,
-                        disabled=supply_not_changed,
+                        disabled=supply_not_changed or supply_is_not_unique,
                         type="primary",
                         key="confirm_supply",
                         ):
@@ -327,6 +328,9 @@ with tabs[0]:
                         ):
                 st.session_state.key_supply += 1
                 st.session_state.should_rerun = True
+
+        if not edited_supply["Dostawca"].is_unique:
+            st.error("Zduplikowano nazwy dostawców. Popraw dane, aby móc zatwierdzić.")
 
         with st.expander("Uwaga dotycząca synchronizacji danych"):
             st.write("""
@@ -398,12 +402,13 @@ with tabs[0]:
         )
         
         demand_not_changed = edited_demand.reset_index(drop=True).equals(st.session_state.demand_df.reset_index(drop=True))
+        demand_is_not_unique = not edited_demand["Odbiorca"].is_unique
         
         B1, B2 = st.columns(2)
         with B1:
             if st.button("Zatwierdź odbiorców",
                         use_container_width=True,
-                        disabled=demand_not_changed,
+                        disabled=demand_not_changed or demand_is_not_unique,
                         type="primary",
                         key="confirm_demand"
                         ):
@@ -420,6 +425,9 @@ with tabs[0]:
                 st.session_state.key_demand += 1
                 st.session_state.should_rerun = True
        
+        if not edited_demand["Odbiorca"].is_unique:
+            st.error("Zduplikowano nazwy odbiorców. Popraw dane, aby móc zatwierdzić.")
+
         with st.expander("Uwaga dotycząca synchronizacji danych"):
             st.write("""
                 Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach. 
