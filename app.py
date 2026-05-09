@@ -281,48 +281,96 @@ with tabs[0]:
         st.subheader("Podaż dostawców")
         edited_supply = st.data_editor(
             st.session_state.supply_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Dostawca": st.column_config.TextColumn(required=True, validate=r"^.{1,}$"),
+                "Podaż": st.column_config.NumberColumn(format="%.2f", required=True)
+            },
+            hide_index=True,
             num_rows="dynamic",
             use_container_width=True,
             key="supply_editor",
         )
-        if not edited_supply.equals(st.session_state.supply_df):
-            st.session_state.supply_df = edited_supply
+        if st.button("Zatwierdź dostawców",
+                    use_container_width=True,
+                    disabled=edited_supply.equals(st.session_state.supply_df),
+                    type="primary"
+                    ):
+            st.session_state.supply_df = edited_supply.reset_index(drop=True)
             sync_supply_data()
+            st.rerun()
+
 
         st.subheader("Koszty zakupu")
         edited_buy = st.data_editor(
             st.session_state.buy_cost_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Dostawca": st.column_config.Column(disabled=True)
+            },
+            hide_index=True,
             num_rows="fixed",
             use_container_width=True,
             key="buy_editor",
         )
-        st.session_state.buy_cost_df = edited_buy
+        if st.button("Zatwierdź koszty",
+                    use_container_width=True,
+                    disabled=edited_buy.equals(st.session_state.buy_cost_df),
+                    type="primary"
+                    ):
+            st.session_state.buy_cost_df = edited_buy.reset_index(drop=True)
+            st.rerun()
+
 
     # KOLUMNA PRAWA
     with col2:
         st.subheader("Popyt odbiorców")
         edited_demand = st.data_editor(
             st.session_state.demand_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Odbiorca": st.column_config.TextColumn(required=True, validate=r"^.{1,}$"),
+                "Popyt": st.column_config.NumberColumn(format="%.2f", required=True)
+            },
+            hide_index=True,
             num_rows="dynamic",
             use_container_width=True,
             key="demand_editor",
         )
-        if not edited_demand.equals(st.session_state.demand_df):
-            st.session_state.demand_df = edited_demand
+        if st.button("Zatwierdź odbiorców",
+                    use_container_width=True,
+                    disabled=edited_demand.equals(st.session_state.demand_df),
+                    type="primary"
+                    ):
+            st.session_state.demand_df = edited_demand.reset_index(drop=True)
             sync_demand_data()
+            st.rerun()
+
 
         st.subheader("Ceny sprzedaży")
         edited_sell = st.data_editor(
             st.session_state.sell_price_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Odbiorca": st.column_config.Column(disabled=True)
+            },
+            hide_index=True,
             num_rows="fixed",
             use_container_width=True,
             key="sell_editor",
         )
-        st.session_state.sell_price_df = edited_sell
+        if st.button("Zatwierdź ceny",
+                    use_container_width=True,
+                    disabled=edited_sell.equals(st.session_state.sell_price_df),
+                    type="primary"
+                    ):
+            st.session_state.sell_price_df = edited_sell.reset_index(drop=True)
+            st.rerun()
+        
 
     st.subheader("Koszty transportu")
 
-    # Upewnij się, że macierz jest zsynchronizowana przed wyświetleniem
+    # Synchronizacja macierzy przed wyświetleniem
     current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
     current_customers = st.session_state.demand_df["Odbiorca"].tolist()
 
@@ -342,9 +390,21 @@ with tabs[0]:
         st.session_state.transport_df = new_transport
 
     edited_transport = st.data_editor(
-        st.session_state.transport_df, use_container_width=True, key="transport_editor"
+        st.session_state.transport_df,
+        column_config={
+            "Dostawca\Odbiorca": st.column_config.Column(disabled=True)
+        },
+        use_container_width=True, 
+        key="transport_editor"
     )
-    st.session_state.transport_df = edited_transport
+    if st.button("Zatwierdź koszta transportu",
+                    use_container_width=True,
+                    disabled=edited_transport.equals(st.session_state.transport_df),
+                    type="primary"
+                    ):
+            st.session_state.transport_df = edited_transport
+            st.rerun()
+
 
 #USTAWIANIE BLOKADY NA DANE PARY RZECZYWISTE ODBIORCA-DOSTAWCA
 # with tabs[1]:
@@ -376,13 +436,13 @@ with tabs[0]:
 #DOBÓR STATUSU NACISKU NA ODBIORCĘ:
 #Wymuś - jak na zajęciach, sprowadza się do zablokowania fikcyjnego dostawcy dla tego odbiorcy i ustwienia temu odbiorcy wyższego priorytetu.
 #Normalny priorytet - traktowanie domyślne.
-#Ogranicz - niższy priorytet - obsługa pomiędzy normalnymi priorytetami, ale przed fikcyjnymi
+#Ogranicz - niższy priorytet - obsługa pomiędzy normalnymi priorytetami, ale przed fikcyjnymi.
 #Wykreśl - całkowicie blokuje jakiekolwiek rzeczywiste dostawy do tego rzeczywistego odbiorcy.
 #Na stan obecny zmiany w tabeli nie wpływają na obliczenia.
 with tabs[1]:
     st.subheader("Blokowanie tras")
 
-    current_customers = st.session_state.demand_df["Odbiorca"].unique().tolist()
+    current_customers = st.session_state.demand_df["Odbiorca"].tolist()
 
     if (
         "customer_settings_df" not in st.session_state 
@@ -415,8 +475,13 @@ with tabs[1]:
         hide_index=True,
         key="customer_settings_editor"
     )
-
-    st.session_state.customer_settings_df = edited_settings
+    if st.button("Zatwierdź blokady",
+                    use_container_width=True,
+                    disabled=edited_settings.equals(st.session_state.customer_settings_df),
+                    type="primary"
+                    ):
+            st.session_state.customer_settings_df = edited_settings
+            st.rerun()
 
 
 # rozwiązanie
