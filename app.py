@@ -276,6 +276,7 @@ tabs = st.tabs(
         "Dane dostawców i odbiorców",
         "Blokowanie tras",
         "Rozwiązanie",
+        "Opis programu",
     ]
 )
 
@@ -344,7 +345,8 @@ with tabs[0]:
             st.session_state.buy_cost_df,
             column_config={
                 "_index": st.column_config.Column("Indeks", disabled=True),
-                "Dostawca": st.column_config.Column(disabled=True)
+                "Dostawca": st.column_config.Column(disabled=True),
+                "Koszt zakupu": st.column_config.NumberColumn(format="%.2f", required=True)
             },
             hide_index=True,
             num_rows="fixed",
@@ -436,7 +438,8 @@ with tabs[0]:
             st.session_state.sell_price_df,
             column_config={
                 "_index": st.column_config.Column("Indeks", disabled=True),
-                "Odbiorca": st.column_config.Column(disabled=True)
+                "Odbiorca": st.column_config.Column(disabled=True),
+                "Cena sprzedaży": st.column_config.NumberColumn(format="%.2f", required=True)
             },
             hide_index=True,
             num_rows="fixed",
@@ -480,22 +483,30 @@ with tabs[0]:
         st.session_state.transport_df.index.tolist() != current_suppliers
         or st.session_state.transport_df.columns.tolist() != current_customers
     ):
-        new_transport = pd.DataFrame(
-            0, index=current_suppliers, columns=current_customers
+        st.session_state.transport_df = (
+            st.session_state.transport_df
+            .reindex(index=current_suppliers, columns=current_customers, fill_value=0.0)
         )
-        old_transport = st.session_state.transport_df
-        for i, row in enumerate(old_transport.index):
-            if row in current_suppliers:
-                for j, col in enumerate(old_transport.columns):
-                    if col in current_customers:
-                        new_transport.loc[row, col] = old_transport.iloc[i, j]
-        st.session_state.transport_df = new_transport
+        # new_transport = pd.DataFrame(
+        #     0, index=current_suppliers, columns=current_customers
+        # )
+        # old_transport = st.session_state.transport_df
+        # for i, row in enumerate(old_transport.index):
+        #     if row in current_suppliers:
+        #         for j, col in enumerate(old_transport.columns):
+        #             if col in current_customers:
+        #                 new_transport.loc[row, col] = old_transport.iloc[i, j]
+        # st.session_state.transport_df = new_transport
+
+    transport_config = {
+        col: st.column_config.NumberColumn(format="%.2f", required=True) 
+        for col in current_customers
+    }
+    transport_config["_index"] = st.column_config.Column("Dostawca\Odbiorca", disabled=True)
 
     edited_transport = st.data_editor(
         st.session_state.transport_df,
-        column_config={
-            "_index": st.column_config.Column("Dostawca/Odbiorca", disabled=True)
-        },
+        column_config=transport_config,
         use_container_width=True, 
         key=transport_key,
     )
@@ -780,3 +791,44 @@ with tabs[2]:
         with col3:
             st.metric("Liczba iteracji", f"{len(history)}")
             st.metric("Maksymalny zysk", f"{total_profit:,.2f}")
+
+
+with tabs[3]:
+    st.subheader("Opis działania programu")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.text("\nProgram służy do rozwiązywania zagadnienia transportowego pośrednika dla wprowadzanych danych dostawców, odbiorców, kosztów transportu i priorytetów odbiorców. " \
+        "Istotą zagadnienia jest takie rozłożenie transportu między określonymi dostawcami a odbiorcami, aby zysk z transportu był dla pośrednika kupującego od danych dostawców i sprzedającego danym odbiorcom jak najwyższy. " \
+        "\n\n" \
+        "Uwzględnione mogą być również pewne naciski takie jak kontrakty o całkowitym zaspokojeniu popytu danego odbiorcy czy spychanie danego odbiorcy na najniższy priorytet ze względów bezpieczeństwa. " \
+        "Można też uwzględnić całkowitą blokadę odbiorcy, co sprawi, że cała dostawa dla niego spadnie na fikcyjnego dostawcę. " \
+        "Narzędzia te są dostępne w sekcji \"Blokada tras\". " \
+        "Ta wersja programu nie uwzględnie blokad i priorytetów na dostawcach. " \
+        "\n\n" \
+        "Program wykorzystuje podczas obliczeń metodę wierzchołka północno-zachodniego. Określa ona kolejność dobierania tras wewnątrz bloków o danym priorytecie. " \
+        "Wybierana jest najpierw trasa w górnym lewym rogu bloku, następnie zaś wybierane są kolejno trasy sąsienie po prawej lub poniżej, zależnie od tego czy zużyty został popyt czy podaż. " \
+        "Aby zrównoważyć całkowity popyt i podaż dla wariantów niezbilansowanych dodani są fikcyjni dostawcy i odbiorcy. Zawsze mają oni najniższy priorytet. " \
+        "Program pozwala przeanalizować cały proces obliczeniowy dzięki możliwości analizy tabel będących wynikami kolejnych iteracji algorytmu. " \
+        "W tym programie uwzględnia się tylko zagadnienie pojedynczego pośrednika z bezpośrednimi dostawami od dostawców do odbiorców. " \
+        "\n\n" \
+        "Aby przeprowadzić obliczenia najpierw uzupełnij dane w sekcji \"Dane dostawców i odbiorców\". " \
+        "Tabele zawierają już pewne przykładowe dane. Dla zaawansowanych badań można podawać ujemne popyt, podaż, ceny i koszta. Nazwy dostawców i odbiorców muszą być unikatowe i mieć przynajmniej 1 znak. " \
+        "Dane, które wprowadzasz nie zostaną wprowadzone do systemu a inne tabele nie zostaną o nie zaktualizowane dopóki nie zatwierdzisz zmian. " \
+        "Zatwierdzenie zmian w tabelach dotyczącyh odbiorców lub dostawców spowoduje utratę niezatwierdzonyc zmian w tabelach używających tych danych, jeśli liczba odbiorców lub dostawców ulegnie zmianie. " \
+        "Aby usunąć dostawców lub odbiorców zaznacz ich w komórkach lewej kolumny danej tabeli a następnie wciśniej klawisz DELETE. Możesz anulować wprowadzone zmiany klikając odpowiedni przycisk. " \
+        "Po wypełnieniu danych możesz wejść do sekcji \"Blokada tras\" i wybrać naciski na wybranych odbiorców. Opisy poszczególnych nacisków znajdują się w rozwijanej legndzie tej sekcji. " \
+        "\n\n" \
+        "Gdy wszystkie dane będą gotowe wejdź do sekcji \"Rozwiązanie\" i kliknij przycisk \"Oblicz plan\". Uzyskasz optymalny plan dostaw z najlepszym zyskiem dla zadanych nacisków. " \
+        "Będziesz mieć też rozwijany wgląd w wyniki w kolejnych iteracjach algorytmu. Na dole strony znajdzie się podsumowanie z kluczowymi wartościami liczbowymi." \
+        "\n\n" \
+        "Życzymy miłego użytkowania!" \
+        "\n\n" \
+        "Twórcy:" \
+        "\n-> XYZ" \
+        "\n-> XYZ" \
+        "\n-> XYZ" \
+        "\n-> XYZ" \
+        "\n-> XYZ" \
+        "\nProjekt wykorzystuje framework Streamlit." \
+        "\n\n" \
+        "")
