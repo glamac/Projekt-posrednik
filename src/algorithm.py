@@ -116,7 +116,7 @@ def solve_intermediary(z, supply, demand, max_iter=100):
 
         alpha_col = np.array(alpha).reshape(-1, 1)
         pom_tab = np.hstack((allocation, alpha_col))
-        beta_row = np.array(list(beta) + [0.0]).reshape(1, -1)
+        beta_row = np.array(list(beta) + [np.nan]).reshape(1, -1)
         allocationAB = np.vstack((pom_tab, beta_row))
         history.append(allocationAB.copy())
 
