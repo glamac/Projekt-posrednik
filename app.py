@@ -579,6 +579,12 @@ def prepare_with_fictitious(
     supply_names_final.append("DF (Fikcyjny)")
     z = np.vstack([z, np.zeros((1, len(demand_final)))])
 
+    #Nazwy dla kolumn i wierszy do tabel iteracyjnych ze zmiennymi dualnymi:
+    supply_names_AB = supply_names_final.copy()
+    demand_names_AB = demand_names_final.copy()
+    supply_names_AB.append("Beta")
+    demand_names_AB.append("Alfa")
+
     # Nacisk - wykreślanie i wymuszanie tras
     for j in range(n_d):
             match pressure[j]:
@@ -591,7 +597,7 @@ def prepare_with_fictitious(
                     continue
 
 
-    return z, supply_final, demand_final, supply_names_final, demand_names_final
+    return z, supply_final, demand_final, supply_names_final, demand_names_final, supply_names_AB, demand_names_AB
 
 
 # Tab 3: Rozwiązanie
@@ -611,7 +617,7 @@ with tabs[2]:
         supply_names = st.session_state.supply_df["Dostawca"].tolist()
         demand_names = st.session_state.demand_df["Odbiorca"].tolist()
 
-        z, supply_final, demand_final, supply_names_final, demand_names_final = (
+        z, supply_final, demand_final, supply_names_final, demand_names_final, supply_names_AB, demand_names_AB = (
             prepare_with_fictitious(
                 supply,
                 demand,
@@ -654,7 +660,7 @@ with tabs[2]:
             is_optimal = it == len(history) - 1
 
             df_iter = pd.DataFrame(
-                alloc, index=supply_names_final, columns=demand_names_final
+                alloc, index=supply_names_AB, columns=demand_names_AB
             )
 
             with st.expander(
