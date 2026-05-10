@@ -106,12 +106,19 @@ def solve_intermediary(z, supply, demand, max_iter=100):
     n_supply, n_demand = z.shape
     allocation = north_west_corner(supply, demand)
     base_ones = (allocation > 0)
-    history = [allocation.copy()]
+    #history = [allocation.copy()]
+    history = []
     iterations_deltas = []
 
     for it in range(max_iter):
         alpha, beta, base_ones = compute_potentials(z, base_ones, n_supply, n_demand)
         deltas = compute_deltas(z, alpha, beta, base_ones, n_supply, n_demand)
+
+        alpha_col = np.array(alpha).reshape(-1, 1)
+        pom_tab = np.hstack((allocation, alpha_col))
+        beta_row = np.array(list(beta) + [0.0]).reshape(1, -1)
+        allocationAB = np.vstack((pom_tab, beta_row))
+        history.append(allocationAB.copy())
 
         max_delta = np.max(deltas)
         iterations_deltas.append((it, deltas.copy(), max_delta))
@@ -127,7 +134,7 @@ def solve_intermediary(z, supply, demand, max_iter=100):
             cycle = find_cycle(base_ones, i0, j0, n_supply, n_demand)
             if cycle:
                 allocation, base_ones = improve_solution(allocation, base_ones, cycle)
-                history.append(allocation.copy())
+                #history.append(allocation.copy())
                 break
 
     total_profit = np.sum(allocation * z)
