@@ -103,10 +103,6 @@ def sync_demand_data():
                         new_blocked.loc[row, col] = current_blocked.iloc[i, j]
         st.session_state.blocked_df = new_blocked
 
-# ============================================================
-# POMOCNICZE
-# ============================================================
-
 
 # ============================================================
 # INICJALIZACJA DATAFRAME'ÓW W SESSION STATE
@@ -376,16 +372,6 @@ with tabs[0]:
             st.session_state.transport_df
             .reindex(index=current_suppliers, columns=current_customers, fill_value=0.0)
         )
-        # new_transport = pd.DataFrame(
-        #     0, index=current_suppliers, columns=current_customers
-        # )
-        # old_transport = st.session_state.transport_df
-        # for i, row in enumerate(old_transport.index):
-        #     if row in current_suppliers:
-        #         for j, col in enumerate(old_transport.columns):
-        #             if col in current_customers:
-        #                 new_transport.loc[row, col] = old_transport.iloc[i, j]
-        # st.session_state.transport_df = new_transport
 
     transport_config = {
         col: st.column_config.NumberColumn(format="%.2f", required=True)
@@ -427,33 +413,6 @@ with tabs[0]:
         st.session_state.should_rerun = False
         st.rerun()
 
-
-#USTAWIANIE BLOKADY NA DANE PARY RZECZYWISTE ODBIORCA-DOSTAWCA
-# with tabs[1]:
-#     st.subheader("Blokowanie tras")
-
-#     current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
-#     current_customers = st.session_state.demand_df["Odbiorca"].tolist()
-
-#     if (
-#         st.session_state.blocked_df.index.tolist() != current_suppliers
-#         or st.session_state.blocked_df.columns.tolist() != current_customers
-#     ):
-#         new_blocked = pd.DataFrame(
-#             False, index=current_suppliers, columns=current_customers
-#         )
-#         old_blocked = st.session_state.blocked_df
-#         for i, row in enumerate(old_blocked.index):
-#             if row in current_suppliers:
-#                 for j, col in enumerate(old_blocked.columns):
-#                     if col in current_customers:
-#                         new_blocked.loc[row, col] = old_blocked.iloc[i, j]
-#         st.session_state.blocked_df = new_blocked
-
-#     edited_blocked = st.data_editor(
-#         st.session_state.blocked_df, width='stretch', key="blocked_editor"
-#     )
-#     st.session_state.blocked_df = edited_blocked
 
 #DOBÓR STATUSU NACISKU NA ODBIORCĘ:
 #Wymuś - jak na zajęciach, sprowadza się do zablokowania fikcyjnego dostawcy dla tego odbiorcy.
@@ -540,14 +499,15 @@ with tabs[1]:
             """)
 
 
-# rozwiązanie
+# ============================================================
+# Rozwiązanie
+# ============================================================
 
 
 def prepare_with_fictitious(
     supply, demand, buy_cost, sell_price, transport, supply_names, demand_names, pressure
 ):
     """Dodaje fikcyjnego dostawcę i fikcyjnego odbiorcę"""
-    has_fictional = False
     n_s = len(supply)
     n_d = len(demand)
 
@@ -564,8 +524,6 @@ def prepare_with_fictitious(
     for i in range(n_s):
         for j in range(n_d):
             z[i, j] = sell_price[j] - buy_cost[i] - transport[i, j]
-            # if blocked[i, j]:
-            #     z[i, j] = -1e9
 
     # Fikcyjny odbiorca
     fictional_demand = max(0, total_supply)
@@ -611,7 +569,6 @@ with tabs[2]:
         sell_price = st.session_state.sell_price_df["Cena sprzedaży"].tolist()
 
         transport = st.session_state.transport_df.values
-        #blocked = st.session_state.blocked_df.values
         pressure = st.session_state.customer_settings_df["Nacisk"].tolist()
 
         supply_names = st.session_state.supply_df["Dostawca"].tolist()
