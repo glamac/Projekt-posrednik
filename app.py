@@ -16,9 +16,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ============================================================
-# ALGORYTM ZAGADNIENIA POŚREDNIKA (METODA PÓŁNOCNO-ZACHODNIA)
-# ============================================================
+# Algorytm
 
 
 def north_west_corner(supply, demand):
@@ -136,7 +134,7 @@ def solve_intermediary(z, supply, demand, max_iter=100):
         max_delta = np.max(deltas)
         iterations_deltas.append((it, deltas.copy(), max_delta))
 
-        if max_delta <= 1e-9:
+        if max_delta < 0:
             break
 
         pos = np.argwhere(deltas == max_delta)[0]
@@ -151,16 +149,10 @@ def solve_intermediary(z, supply, demand, max_iter=100):
     return allocation, history, iterations_deltas, total_profit
 
 
-# ============================================================
-# FUNKCJE SYNCHRONIZACJI DANYCH
-# ============================================================
-
-
 def sync_supply_data():
     """Synchronizuje koszty zakupu i macierz transportu z listą dostawców"""
     current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
 
-    # Synchronizacja kosztów zakupu
     current_buy = st.session_state.buy_cost_df
     current_buy_suppliers = current_buy["Dostawca"].tolist()
 
@@ -172,7 +164,6 @@ def sync_supply_data():
                 new_buy.loc[idx, "Koszt zakupu"] = current_buy.iloc[i, 1]
         st.session_state.buy_cost_df = new_buy
 
-    # Synchronizacja macierzy transportu (wiersze)
     current_transport = st.session_state.transport_df
     current_rows = current_transport.index.tolist()
     current_cols = current_transport.columns.tolist()
@@ -187,7 +178,6 @@ def sync_supply_data():
                         new_transport.loc[row, col] = current_transport.iloc[i, j]
         st.session_state.transport_df = new_transport
 
-    # Synchronizacja blokad (wiersze)
     current_blocked = st.session_state.blocked_df
     current_blocked_rows = current_blocked.index.tolist()
 
@@ -205,7 +195,6 @@ def sync_demand_data():
     """Synchronizuje ceny sprzedaży i macierz transportu z listą odbiorców"""
     current_customers = st.session_state.demand_df["Odbiorca"].tolist()
 
-    # Synchronizacja cen sprzedaży
     current_sell = st.session_state.sell_price_df
     current_sell_customers = current_sell["Odbiorca"].tolist()
 
@@ -217,7 +206,6 @@ def sync_demand_data():
                 new_sell.loc[idx, "Cena sprzedaży"] = current_sell.iloc[i, 1]
         st.session_state.sell_price_df = new_sell
 
-    # Synchronizacja macierzy transportu (kolumny)
     current_transport = st.session_state.transport_df
     current_rows = current_transport.index.tolist()
     current_cols = current_transport.columns.tolist()
@@ -232,7 +220,6 @@ def sync_demand_data():
                         new_transport.loc[row, col] = current_transport.iloc[i, j]
         st.session_state.transport_df = new_transport
 
-    # Synchronizacja blokad (kolumny)
     current_blocked = st.session_state.blocked_df
     current_blocked_rows = current_blocked.index.tolist()
     current_blocked_cols = current_blocked.columns.tolist()
