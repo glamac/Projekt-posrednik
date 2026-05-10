@@ -92,11 +92,10 @@ def improve_solution(allocation, base_ones, cycle):
             allocation[i][j] -= min_val
 
     base_ones[cycle[0][0]][cycle[0][1]] = True
-    removed = False
+
     for (i, j) in cycle[1::2]:
         if allocation[i][j] == 0:
             base_ones[i][j] = False
-            removed = True
             break
 
     return allocation, base_ones
@@ -120,13 +119,16 @@ def solve_intermediary(z, supply, demand, max_iter=100):
         if max_delta < 0:
             break
 
-        pos = np.argwhere(deltas == max_delta)[0]
-        i0, j0 = pos[0], pos[1]
+        max_deltas_in_order = np.argsort(deltas.ravel())[::-1]
+        for ind in max_deltas_in_order:
+            pos = np.argwhere(deltas == deltas.ravel()[ind])[0]
+            i0, j0 = pos[0], pos[1]
 
-        cycle = find_cycle(base_ones, i0, j0, n_supply, n_demand)
-        if cycle:
-            allocation, base_ones = improve_solution(allocation, base_ones, cycle)
-            history.append(allocation.copy())
+            cycle = find_cycle(base_ones, i0, j0, n_supply, n_demand)
+            if cycle:
+                allocation, base_ones = improve_solution(allocation, base_ones, cycle)
+                history.append(allocation.copy())
+                break
 
     total_profit = np.sum(allocation * z)
     return allocation, history, iterations_deltas, total_profit

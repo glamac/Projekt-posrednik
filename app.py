@@ -182,7 +182,7 @@ with tabs[0]:
             },
             hide_index=True,
             num_rows="dynamic",
-            use_container_width=True,
+            width='stretch',
             key=supply_key,
         )
 
@@ -192,7 +192,7 @@ with tabs[0]:
         B1, B2 = st.columns(2)
         with B1:
             if st.button("Zatwierdź dostawców",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=supply_not_changed or supply_is_not_unique,
                         type="primary",
                         key="confirm_supply",
@@ -202,7 +202,7 @@ with tabs[0]:
                 st.session_state.should_rerun = True
         with B2:
             if st.button("Anuluj zmiany",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=supply_not_changed,
                         type="primary",
                         key="cancel_supply"
@@ -235,7 +235,7 @@ with tabs[0]:
             },
             hide_index=True,
             num_rows="fixed",
-            use_container_width=True,
+            width='stretch',
             key=buy_key,
         )
 
@@ -244,7 +244,7 @@ with tabs[0]:
         B1, B2 = st.columns(2)
         with B1:
             if st.button("Zatwierdź koszty",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=buy_not_changed,
                         type="primary",
                         key="confirm_buy"
@@ -253,7 +253,7 @@ with tabs[0]:
                 st.session_state.should_rerun = True
         with B2:
             if st.button("Anuluj zmiany",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=buy_not_changed,
                         type="primary",
                         key="cancel_buy"
@@ -278,7 +278,7 @@ with tabs[0]:
             },
             hide_index=True,
             num_rows="dynamic",
-            use_container_width=True,
+            width='stretch',
             key=demand_key,
         )
 
@@ -288,7 +288,7 @@ with tabs[0]:
         B1, B2 = st.columns(2)
         with B1:
             if st.button("Zatwierdź odbiorców",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=demand_not_changed or demand_is_not_unique,
                         type="primary",
                         key="confirm_demand"
@@ -298,7 +298,7 @@ with tabs[0]:
                 st.session_state.should_rerun = True
         with B2:
             if st.button("Anuluj zmiany",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=demand_not_changed,
                         type="primary",
                         key="cancel_demand"
@@ -332,7 +332,7 @@ with tabs[0]:
             },
             hide_index=True,
             num_rows="fixed",
-            use_container_width=True,
+            width='stretch',
             key=sell_key,
         )
 
@@ -341,7 +341,7 @@ with tabs[0]:
         B1, B2 = st.columns(2)
         with B1:
             if st.button("Zatwierdź ceny",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=sell_not_changed,
                         type="primary",
                         key="confirm_sell"
@@ -350,7 +350,7 @@ with tabs[0]:
                 st.session_state.should_rerun = True
         with B2:
             if st.button("Anuluj zmiany",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=sell_not_changed,
                         type="primary",
                         key="cancel_sell"
@@ -391,12 +391,12 @@ with tabs[0]:
         col: st.column_config.NumberColumn(format="%.2f", required=True)
         for col in current_customers
     }
-    transport_config["_index"] = st.column_config.Column("Dostawca\Odbiorca", disabled=True)
+    transport_config["_index"] = st.column_config.Column("Dostawca\\Odbiorca", disabled=True)
 
     edited_transport = st.data_editor(
         st.session_state.transport_df,
         column_config=transport_config,
-        use_container_width=True,
+        width='stretch',
         key=transport_key,
     )
 
@@ -405,7 +405,7 @@ with tabs[0]:
     B1, B2 = st.columns(2)
     with B1:
         if st.button("Zatwierdź koszta transportu",
-                    use_container_width=True,
+                    width='stretch',
                     disabled=transport_not_changed,
                     type="primary",
                     key="confirm_transport"
@@ -414,7 +414,7 @@ with tabs[0]:
             st.session_state.should_rerun = True
     with B2:
         if st.button("Anuluj zmiany",
-                    use_container_width=True,
+                    width='stretch',
                     disabled=transport_not_changed,
                     type="primary",
                     key="cancel_transport"
@@ -451,7 +451,7 @@ with tabs[0]:
 #         st.session_state.blocked_df = new_blocked
 
 #     edited_blocked = st.data_editor(
-#         st.session_state.blocked_df, use_container_width=True, key="blocked_editor"
+#         st.session_state.blocked_df, width='stretch', key="blocked_editor"
 #     )
 #     st.session_state.blocked_df = edited_blocked
 
@@ -494,7 +494,7 @@ with tabs[1]:
                 default="Normalny przydział"
             )
         },
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         key=settings_key
     )
@@ -505,7 +505,7 @@ with tabs[1]:
     B1, B2, B3 = st.columns(3)
     with B1:
         if st.button("Zatwierdź blokady",
-                    use_container_width=True,
+                    width='stretch',
                     disabled=settings_not_changed,
                     type="primary",
                     key="confirm_settings"
@@ -514,7 +514,7 @@ with tabs[1]:
             st.rerun()
     with B2:
         if st.button("Resetuj blokady",
-                    use_container_width=True,
+                    width='stretch',
                     disabled=is_already_reset,
                     type="primary",
                     key="reset_settings"
@@ -524,7 +524,7 @@ with tabs[1]:
             st.rerun()
     with B3:
         if st.button("Anuluj zmiany",
-                    use_container_width=True,
+                    width='stretch',
                     disabled=settings_not_changed,
                     type="primary",
                     key="cancel_settings"
@@ -599,7 +599,7 @@ def prepare_with_fictitious(
 with tabs[2]:
     st.subheader("Rozwiąż zagadnienie pośrednika")
 
-    if st.button("Oblicz plan", type="primary", use_container_width=True):
+    if st.button("Oblicz plan", type="primary", width='stretch'):
         supply = st.session_state.supply_df["Podaż"].tolist()
         demand = st.session_state.demand_df["Popyt"].tolist()
         buy_cost = st.session_state.buy_cost_df["Koszt zakupu"].tolist()
@@ -634,7 +634,7 @@ with tabs[2]:
             )
         else:
             col3.info(
-                f'Popyt == Podaż, nie potrzeba fikcyjnego dostawcy/odbiorcy.'
+                'Popyt jest równy podaży, nie potrzeba fikcyjnego dostawcy/odbiorcy.'
             )
 
         with st.spinner("Obliczanie optymalnego planu..."):
@@ -648,11 +648,11 @@ with tabs[2]:
         df_result = pd.DataFrame(
             allocation, index=supply_names_final, columns=demand_names_final
         )
-        st.dataframe(df_result.style.format("{:.0f}"), use_container_width=True)
+        st.dataframe(df_result.style.format("{:.0f}"), width='stretch')
 
         st.subheader("Macierz zysku jednostkowego")
         df_z = pd.DataFrame(z, index=supply_names_final, columns=demand_names_final)
-        st.dataframe(df_z.style.format("{:.2f}"), use_container_width=True)
+        st.dataframe(df_z.style.format("{:.2f}"), width='stretch')
 
         st.subheader("Iteracje algorytmu")
 
@@ -666,7 +666,7 @@ with tabs[2]:
             with st.expander(
                 f"Iteracja {it + 1}" + (" - OPTYMALNA" if is_optimal else "")
             ):
-                st.dataframe(df_iter.style.format("{:.0f}"), use_container_width=True)
+                st.dataframe(df_iter.style.format("{:.0f}"), width='stretch')
 
                 if it < len(deltas_history):
                     _, deltas, max_d = deltas_history[it]
@@ -676,7 +676,7 @@ with tabs[2]:
                     )
                     st.write(f"**Maksymalna Δ = {max_d:.4f}**")
                     st.dataframe(
-                        df_deltas.style.format("{:.2f}"), use_container_width=True
+                        df_deltas.style.format("{:.2f}"), width='stretch'
                     )
 
                     if max_d < 0:
