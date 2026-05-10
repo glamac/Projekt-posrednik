@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 import streamlit as st
+from src.algorithm import *
 
 st.set_page_config(layout="wide", page_title="Zagadnienie Pośrednika – NW")
 
@@ -16,137 +17,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Algorytm
-
-
-def north_west_corner(supply, demand):
-    """Rozwiązanie początkowe – metoda NW"""
-    n_supply = len(supply)
-    n_demand = len(demand)
-    allocation = np.zeros((n_supply, n_demand))
-    supply_left = supply.copy()
-    demand_left = demand.copy()
-
-    i, j = 0, 0
-    while i < n_supply and j < n_demand:
-        x = min(supply_left[i], demand_left[j])
-        allocation[i, j] = x
-        supply_left[i] -= x
-        demand_left[j] -= x
-
-        if supply_left[i] == 0:
-            i += 1
-        if demand_left[j] == 0:
-            j += 1
-    return allocation
-
-
-def compute_potentials(z, base_ones, n_supply, n_demand):
-    """Wyznacz α i β z równań: z_ij - α_i - β_j = 0 dla tras bazowych"""
-    alpha = [None] * n_supply
-    beta = [None] * n_demand
-
-    alpha[0] = 0
-    
-    while None in alpha or None in beta:
-        changed = False
-        for i in range(n_supply):
-            for j in range(n_demand):
-                if base_ones[i, j]:
-                    if alpha[i] is not None and beta[j] is None:
-                        beta[j] = z[i, j] - alpha[i]
-                        changed = True
-                    elif beta[j] is not None and alpha[i] is None:
-                        alpha[i] = z[i, j] - beta[j]
-                        changed = True
-
-        if not changed and (None in alpha or None in beta):
-            found = False
-            for i in range(n_supply):
-                for j in range(n_demand):
-                    if not base_ones[i, j]:
-                        if (alpha[i] is not None and beta[j] is None) or \
-                           (beta[j] is not None and alpha[i] is None):
-                            base_ones[i, j] = True
-                            found = True
-                            break
-                if found: break
-
-    return alpha, beta, base_ones
-
-
-def compute_deltas(z, alpha, beta, base_ones, n_supply, n_demand):
-    """Δ_ij = z_ij - α_i - β_j dla komórek niebazowych"""
-    deltas = np.full((n_supply, n_demand), -np.inf)
-    for i in range(n_supply):
-        for j in range(n_demand):
-            if not base_ones[i][j] and alpha[i] is not None and beta[j] is not None:
-                deltas[i][j] = z[i][j] - alpha[i] - beta[j]
-    return deltas
-
-
-def find_cycle(base_ones, start_i, start_j, n_supply, n_demand):
-    """Znajdź cykl korekcyjny dla danej komórki"""
-    for i in range(n_supply):
-        if i != start_i and base_ones[i][start_j]:
-            for j in range(n_demand):
-                if j != start_j and base_ones[start_i][j] and base_ones[i][j]:
-                    return [(start_i, start_j), (i, start_j), (i, j), (start_i, j)]
-    return None
-
-
-def improve_solution(allocation, base_ones, cycle):
-    """Poprawa rozwiązania – przesunięcie w cyklu (+ - + -)"""
-    if not cycle:
-        return allocation
-    values = [allocation[i][j] for (i, j) in cycle[1::2]]
-    min_val = min(values)
-
-    for idx, (i, j) in enumerate(cycle):
-        if idx % 2 == 0:
-            allocation[i][j] += min_val
-        else:
-            allocation[i][j] -= min_val
-    
-    base_ones[cycle[0][0]][cycle[0][1]] = True
-    removed = False
-    for (i, j) in cycle[1::2]:
-        if allocation[i][j] == 0:
-            base_ones[i][j] = False
-            removed = True
-            break
-
-    return allocation, base_ones
-
-
-def solve_intermediary(z, supply, demand, max_iter=100):
-    """Rozwiązuje zagadnienie pośrednika (maksymalizacja)"""
-    n_supply, n_demand = z.shape
-    allocation = north_west_corner(supply, demand)
-    base_ones = (allocation > 0)
-    history = [allocation.copy()]
-    iterations_deltas = []
-
-    for it in range(max_iter):
-        alpha, beta, base_ones = compute_potentials(z, base_ones, n_supply, n_demand)
-        deltas = compute_deltas(z, alpha, beta, base_ones, n_supply, n_demand)
-
-        max_delta = np.max(deltas)
-        iterations_deltas.append((it, deltas.copy(), max_delta))
-
-        if max_delta < 0:
-            break
-
-        pos = np.argwhere(deltas == max_delta)[0]
-        i0, j0 = pos[0], pos[1]
-
-        cycle = find_cycle(base_ones, i0, j0, n_supply, n_demand)
-        if cycle:
-            allocation, base_ones = improve_solution(allocation, base_ones, cycle)
-            history.append(allocation.copy())
-
-    total_profit = np.sum(allocation * z)
-    return allocation, history, iterations_deltas, total_profit
 
 
 def sync_supply_data():
@@ -292,7 +162,8 @@ tabs = st.tabs(
 
 with tabs[0]:
 
-    if "should_rerun" not in st.session_state: st.session_state.should_rerun = False
+    if "should_rerun" not in st.session_state:
+        st.session_state.should_rerun = False
     col1, col2 = st.columns(2)
 
     # KOLUMNA LEWA
@@ -344,7 +215,7 @@ with tabs[0]:
 
         with st.expander("Uwaga dotycząca synchronizacji danych"):
             st.write("""
-                Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach. 
+                Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach.
                 **Wszystkie niezatwierdzone zmiany w poniższych tabelach mogą przepaść:**
                 * Koszty zakupu
                 * Koszty transportu
@@ -410,10 +281,10 @@ with tabs[0]:
             use_container_width=True,
             key=demand_key,
         )
-        
+
         demand_not_changed = edited_demand.reset_index(drop=True).equals(st.session_state.demand_df.reset_index(drop=True))
         demand_is_not_unique = not edited_demand["Odbiorca"].is_unique
-        
+
         B1, B2 = st.columns(2)
         with B1:
             if st.button("Zatwierdź odbiorców",
@@ -434,13 +305,13 @@ with tabs[0]:
                         ):
                 st.session_state.key_demand += 1
                 st.session_state.should_rerun = True
-       
+
         if not edited_demand["Odbiorca"].is_unique:
             st.error("Zduplikowano nazwy odbiorców. Popraw dane, aby móc zatwierdzić.")
 
         with st.expander("Uwaga dotycząca synchronizacji danych"):
             st.write("""
-                Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach. 
+                Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach.
                 **Wszystkie niezatwierdzone zmiany w poniższych tabelach mogą przepaść:**
                 * Ceny sprzedaży
                 * Koszty transportu
@@ -486,7 +357,7 @@ with tabs[0]:
                         ):
                 st.session_state.key_sell += 1
                 st.session_state.should_rerun = True
-        
+
 
     #KOSZTY TRANSPORTU
     st.subheader("Koszty transportu")
@@ -517,7 +388,7 @@ with tabs[0]:
         # st.session_state.transport_df = new_transport
 
     transport_config = {
-        col: st.column_config.NumberColumn(format="%.2f", required=True) 
+        col: st.column_config.NumberColumn(format="%.2f", required=True)
         for col in current_customers
     }
     transport_config["_index"] = st.column_config.Column("Dostawca\Odbiorca", disabled=True)
@@ -525,7 +396,7 @@ with tabs[0]:
     edited_transport = st.data_editor(
         st.session_state.transport_df,
         column_config=transport_config,
-        use_container_width=True, 
+        use_container_width=True,
         key=transport_key,
     )
 
@@ -596,19 +467,19 @@ with tabs[1]:
     current_customers = st.session_state.demand_df["Odbiorca"].tolist()
 
     if (
-        "customer_settings_df" not in st.session_state 
+        "customer_settings_df" not in st.session_state
         or st.session_state.customer_settings_df["Odbiorca"].tolist() != current_customers
     ):
         new_settings = pd.DataFrame({
             "Odbiorca": current_customers,
-            "Nacisk": "Normalny przydział" 
+            "Nacisk": "Normalny przydział"
         })
-        
+
         if "customer_settings_df" in st.session_state:
             old_settings = st.session_state.customer_settings_df
             mapping = dict(zip(old_settings["Odbiorca"], old_settings["Nacisk"]))
             new_settings["Nacisk"] = new_settings["Odbiorca"].map(lambda x: mapping.get(x, "Normalny przydział"))
-        
+
         st.session_state.customer_settings_df = new_settings
 
     edited_settings = st.data_editor(
@@ -644,7 +515,7 @@ with tabs[1]:
     with B2:
         if st.button("Resetuj blokady",
                     use_container_width=True,
-                    disabled=is_already_reset, 
+                    disabled=is_already_reset,
                     type="primary",
                     key="reset_settings"
                     ):
