@@ -43,48 +43,61 @@ def north_west_corner(supply, demand):
     return allocation
 
 
-def compute_potentials(z, allocation, n_supply, n_demand):
+def compute_potentials(z, base_ones, n_supply, n_demand):
     """Wyznacz α i β z równań: z_ij - α_i - β_j = 0 dla tras bazowych"""
     alpha = [None] * n_supply
     beta = [None] * n_demand
-    alpha[0] = 0
-    changed = True
 
-    while changed:
+    alpha[0] = 0
+    
+    while None in alpha or None in beta:
         changed = False
         for i in range(n_supply):
             for j in range(n_demand):
-                if allocation[i][j] > 0:
+                if base_ones[i, j]:
                     if alpha[i] is not None and beta[j] is None:
-                        beta[j] = z[i][j] - alpha[i]
+                        beta[j] = z[i, j] - alpha[i]
                         changed = True
-                    if beta[j] is not None and alpha[i] is None:
-                        alpha[i] = z[i][j] - beta[j]
+                    elif beta[j] is not None and alpha[i] is None:
+                        alpha[i] = z[i, j] - beta[j]
                         changed = True
-    return alpha, beta
+
+        if not changed and (None in alpha or None in beta):
+            found = False
+            for i in range(n_supply):
+                for j in range(n_demand):
+                    if not base_ones[i, j]:
+                        if (alpha[i] is not None and beta[j] is None) or \
+                           (beta[j] is not None and alpha[i] is None):
+                            base_ones[i, j] = True
+                            found = True
+                            break
+                if found: break
+
+    return alpha, beta, base_ones
 
 
-def compute_deltas(z, alpha, beta, allocation, n_supply, n_demand):
+def compute_deltas(z, alpha, beta, base_ones, n_supply, n_demand):
     """Δ_ij = z_ij - α_i - β_j dla komórek niebazowych"""
     deltas = np.full((n_supply, n_demand), -np.inf)
     for i in range(n_supply):
         for j in range(n_demand):
-            if allocation[i][j] == 0 and alpha[i] is not None and beta[j] is not None:
+            if not base_ones[i][j] and alpha[i] is not None and beta[j] is not None:
                 deltas[i][j] = z[i][j] - alpha[i] - beta[j]
     return deltas
 
 
-def find_cycle(allocation, start_i, start_j, n_supply, n_demand):
+def find_cycle(base_ones, start_i, start_j, n_supply, n_demand):
     """Znajdź cykl korekcyjny dla danej komórki"""
     for i in range(n_supply):
-        if i != start_i and allocation[i][start_j] > 0:
+        if i != start_i and base_ones[i][start_j]:
             for j in range(n_demand):
-                if j != start_j and allocation[start_i][j] > 0 and allocation[i][j] > 0:
+                if j != start_j and base_ones[start_i][j] and base_ones[i][j]:
                     return [(start_i, start_j), (i, start_j), (i, j), (start_i, j)]
     return None
 
 
-def improve_solution(allocation, cycle):
+def improve_solution(allocation, base_ones, cycle):
     """Poprawa rozwiązania – przesunięcie w cyklu (+ - + -)"""
     if not cycle:
         return allocation
@@ -96,19 +109,29 @@ def improve_solution(allocation, cycle):
             allocation[i][j] += min_val
         else:
             allocation[i][j] -= min_val
-    return allocation
+    
+    base_ones[cycle[0][0]][cycle[0][1]] = True
+    removed = False
+    for (i, j) in cycle[1::2]:
+        if allocation[i][j] == 0:
+            base_ones[i][j] = False
+            removed = True
+            break
+
+    return allocation, base_ones
 
 
 def solve_intermediary(z, supply, demand, max_iter=100):
     """Rozwiązuje zagadnienie pośrednika (maksymalizacja)"""
     n_supply, n_demand = z.shape
     allocation = north_west_corner(supply, demand)
+    base_ones = (allocation > 0)
     history = [allocation.copy()]
     iterations_deltas = []
 
     for it in range(max_iter):
-        alpha, beta = compute_potentials(z, allocation, n_supply, n_demand)
-        deltas = compute_deltas(z, alpha, beta, allocation, n_supply, n_demand)
+        alpha, beta, base_ones = compute_potentials(z, base_ones, n_supply, n_demand)
+        deltas = compute_deltas(z, alpha, beta, base_ones, n_supply, n_demand)
 
         max_delta = np.max(deltas)
         iterations_deltas.append((it, deltas.copy(), max_delta))
@@ -119,9 +142,9 @@ def solve_intermediary(z, supply, demand, max_iter=100):
         pos = np.argwhere(deltas == max_delta)[0]
         i0, j0 = pos[0], pos[1]
 
-        cycle = find_cycle(allocation, i0, j0, n_supply, n_demand)
+        cycle = find_cycle(base_ones, i0, j0, n_supply, n_demand)
         if cycle:
-            allocation = improve_solution(allocation, cycle)
+            allocation, base_ones = improve_solution(allocation, base_ones, cycle)
             history.append(allocation.copy())
 
     total_profit = np.sum(allocation * z)
@@ -575,11 +598,9 @@ with tabs[0]:
 #     st.session_state.blocked_df = edited_blocked
 
 #DOBÓR STATUSU NACISKU NA ODBIORCĘ:
-#Wymuś - jak na zajęciach, sprowadza się do zablokowania fikcyjnego dostawcy dla tego odbiorcy i ustwienia temu odbiorcy wyższego priorytetu.
+#Wymuś - jak na zajęciach, sprowadza się do zablokowania fikcyjnego dostawcy dla tego odbiorcy.
 #Normalny priorytet - traktowanie domyślne.
-#Ogranicz - niższy priorytet - obsługa pomiędzy normalnymi priorytetami, ale przed fikcyjnymi.
 #Wykreśl - całkowicie blokuje jakiekolwiek rzeczywiste dostawy do tego rzeczywistego odbiorcy.
-#Na stan obecny zmiany w tabeli nie wpływają na obliczenia.
 with tabs[1]:
     st.subheader("Blokowanie tras")
     if "key_settings" not in st.session_state: st.session_state.key_settings = 0
@@ -610,7 +631,7 @@ with tabs[1]:
             "Odbiorca": st.column_config.Column(disabled=True),
             "Nacisk": st.column_config.SelectboxColumn(
                 "Nacisk",
-                options=["Wymuś", "Normalny przydział", "Ogranicz", "Wykreśl"],
+                options=["Wymuś", "Normalny przydział", "Wykreśl"],
                 required=True,
                 default="Normalny przydział"
             )
@@ -655,11 +676,8 @@ with tabs[1]:
 
     with st.expander("Opis dostępnych nacisków"):
             st.write("""
-                Priorytet określa kolejność przypisywania zasobów do tras podczas obliczeń algorytmu. Bloki o określonych priorytetach są analizowane od tych z najwyższym priorytetem do tych z najniższym. 
-                Fikcyjni dostawcy i odbiorcy zawsze mają trasy o najniższym priorytecie.
-                * Wymuś - dany odbiorca będzie miał wysoki priorytet, a wszelkie dostawy od fikcyjnego dostawcy będą w jego przypadku uznane za skrajnie niekorzystne.
+                * Wymuś - dany odbiorca będzie miał wysoki priorytet - wszelkie dostawy od fikcyjnego dostawcy będą w jego przypadku uznane za skrajnie niekorzystne.
                 * Normalny priorytet - dany odbiorca będzie miał normalny priorytet.
-                * Ogranicz - dany odbiorca będzie miał niższy priorytet - będzie obsługiwany po odbiorcach z normalnym priorytetem, ale przed fikcyjnymi.
                 * Wykreśl - rzeczywiści dostawcy będą mieć rzeczywiste zyski z tras do tego odbiorcy traktowane jako skrajnie niekorzystne.
             """)
 
@@ -668,7 +686,7 @@ with tabs[1]:
 
 
 def prepare_with_fictitious(
-    supply, demand, buy_cost, sell_price, transport, blocked, supply_names, demand_names
+    supply, demand, buy_cost, sell_price, transport, supply_names, demand_names, pressure
 ):
     """Zawsze dodaje fikcyjnego dostawcę i fikcyjnego odbiorcę"""
     n_s = len(supply)
@@ -687,8 +705,8 @@ def prepare_with_fictitious(
     for i in range(n_s):
         for j in range(n_d):
             z[i, j] = sell_price[j] - buy_cost[i] - transport[i, j]
-            if blocked[i, j]:
-                z[i, j] = -1e9
+            # if blocked[i, j]:
+            #     z[i, j] = -1e9
 
     # Fikcyjny odbiorca
     fictional_demand = max(0, total_supply)
@@ -701,6 +719,18 @@ def prepare_with_fictitious(
     supply_final.append(fictional_supply)
     supply_names_final.append("DF (Fikcyjny)")
     z = np.vstack([z, np.zeros((1, len(demand_final)))])
+
+    # Nacisk - wykreślanie i wymuszanie tras
+    for j in range(n_d):
+            match pressure[j]:
+                case "Wymuś":
+                    z[n_s][j] = -1e9
+                case "Wykreśl":
+                    for i in range(n_s):
+                        z[i][j] = -1e9
+                case "Normalny priorytet" | _:
+                    continue
+
 
     return z, supply_final, demand_final, supply_names_final, demand_names_final
 
@@ -716,7 +746,8 @@ with tabs[2]:
         sell_price = st.session_state.sell_price_df["Cena sprzedaży"].tolist()
 
         transport = st.session_state.transport_df.values
-        blocked = st.session_state.blocked_df.values
+        #blocked = st.session_state.blocked_df.values
+        pressure = st.session_state.customer_settings_df["Nacisk"].tolist()
 
         supply_names = st.session_state.supply_df["Dostawca"].tolist()
         demand_names = st.session_state.demand_df["Odbiorca"].tolist()
@@ -728,9 +759,9 @@ with tabs[2]:
                 buy_cost,
                 sell_price,
                 transport,
-                blocked,
                 supply_names,
                 demand_names,
+                pressure
             )
         )
 
@@ -808,7 +839,7 @@ with tabs[3]:
         st.text("\nProgram służy do rozwiązywania zagadnienia transportowego pośrednika dla wprowadzanych danych dostawców, odbiorców, kosztów transportu i priorytetów odbiorców. " \
         "Istotą zagadnienia jest takie rozłożenie transportu między określonymi dostawcami a odbiorcami, aby zysk z transportu był dla pośrednika kupującego od danych dostawców i sprzedającego danym odbiorcom jak najwyższy. " \
         "\n\n" \
-        "Uwzględnione mogą być również pewne naciski takie jak kontrakty o całkowitym zaspokojeniu popytu danego odbiorcy czy spychanie danego odbiorcy na najniższy priorytet ze względów bezpieczeństwa. " \
+        "Uwzględnione mogą być również pewne naciski takie jak kontrakty o całkowitym zaspokojeniu popytu danego odbiorcy. " \
         "Można też uwzględnić całkowitą blokadę odbiorcy, co sprawi, że cała dostawa dla niego spadnie na fikcyjnego dostawcę. " \
         "Narzędzia te są dostępne w sekcji \"Blokada tras\". " \
         "Ta wersja programu nie uwzględnie blokad i priorytetów na dostawcach. " \
