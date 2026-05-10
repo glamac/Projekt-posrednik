@@ -721,12 +721,6 @@ with tabs[3]:
         "\n\n" \
         "Życzymy miłego użytkowania!" \
         "\n\n" \
-        "Twórcy:" \
-        "\n-> XYZ" \
-        "\n-> XYZ" \
-        "\n-> XYZ" \
-        "\n-> XYZ" \
-        "\n-> XYZ" \
         "\nProjekt wykorzystuje framework Streamlit." \
         "\n\n" \
         "")
