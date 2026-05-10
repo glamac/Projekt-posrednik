@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 import streamlit as st
-from src.algorithm import *
+from src.algorithm import solve_intermediary
 
 st.set_page_config(layout="wide", page_title="Zagadnienie Pośrednika – NW")
 
@@ -546,7 +546,8 @@ with tabs[1]:
 def prepare_with_fictitious(
     supply, demand, buy_cost, sell_price, transport, supply_names, demand_names, pressure
 ):
-    """Zawsze dodaje fikcyjnego dostawcę i fikcyjnego odbiorcę"""
+    """Dodaje fikcyjnego dostawcę i fikcyjnego odbiorcę"""
+    has_fictional = False
     n_s = len(supply)
     n_d = len(demand)
 
@@ -565,18 +566,19 @@ def prepare_with_fictitious(
             z[i, j] = sell_price[j] - buy_cost[i] - transport[i, j]
             # if blocked[i, j]:
             #     z[i, j] = -1e9
+    if not total_supply == total_demand:
+        # Fikcyjny odbiorca
+        fictional_demand = max(0, total_supply)
+        demand_final.append(fictional_demand)
+        demand_names_final.append("OF (Fikcyjny)")
+        z = np.hstack([z, np.zeros((n_s, 1))])
 
-    # Fikcyjny odbiorca
-    fictional_demand = max(0, total_supply)
-    demand_final.append(fictional_demand)
-    demand_names_final.append("OF (Fikcyjny)")
-    z = np.hstack([z, np.zeros((n_s, 1))])
-
-    # Fikcyjny dostawca
-    fictional_supply = max(0, total_demand)
-    supply_final.append(fictional_supply)
-    supply_names_final.append("DF (Fikcyjny)")
-    z = np.vstack([z, np.zeros((1, len(demand_final)))])
+        # Fikcyjny dostawca
+        fictional_supply = max(0, total_demand)
+        supply_final.append(fictional_supply)
+        supply_names_final.append("DF (Fikcyjny)")
+        z = np.vstack([z, np.zeros((1, len(demand_final)))])
+        has_fictional = True
 
     # Nacisk - wykreślanie i wymuszanie tras
     for j in range(n_d):
@@ -590,7 +592,7 @@ def prepare_with_fictitious(
                     continue
 
 
-    return z, supply_final, demand_final, supply_names_final, demand_names_final
+    return z, supply_final, demand_final, supply_names_final, demand_names_final, has_fictional
 
 
 # Tab 3: Rozwiązanie
@@ -610,7 +612,7 @@ with tabs[2]:
         supply_names = st.session_state.supply_df["Dostawca"].tolist()
         demand_names = st.session_state.demand_df["Odbiorca"].tolist()
 
-        z, supply_final, demand_final, supply_names_final, demand_names_final = (
+        z, supply_final, demand_final, supply_names_final, demand_names_final, has_fictional = (
             prepare_with_fictitious(
                 supply,
                 demand,
@@ -626,9 +628,14 @@ with tabs[2]:
         col1, col2, col3 = st.columns(3)
 
         col2.info(f"Bilans: podaż = {sum(supply)}, popyt = {sum(demand)}")
-        col3.info(
-            f"Dodano fikcyjnego odbiorcę (popyt={demand_final[-1]}) i fikcyjnego dostawcę (podaż={supply_final[-1]})"
-        )
+        if has_fictional:
+            col3.info(
+                f"Dodano fikcyjnego odbiorcę (popyt={demand_final[-1]}) i fikcyjnego dostawcę (podaż={supply_final[-1]})"
+            )
+        else:
+            col3.info(
+                f'Popyt == Podaż, nie potrzeba fikcyjnego dostawcy/odbiorcy.'
+            )
 
         with st.spinner("Obliczanie optymalnego planu..."):
             allocation, history, deltas_history, total_profit = solve_intermediary(
