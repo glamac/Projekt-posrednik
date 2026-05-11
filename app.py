@@ -1,4 +1,3 @@
-# app.py
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -611,6 +610,82 @@ with tabs[2]:
         df_z = pd.DataFrame(z, index=supply_names_final, columns=demand_names_final)
         st.dataframe(df_z.style.format("{:.2f}"), width='stretch')
 
+        # === NOWA TABELA: ZESTAWIENIE NA TRASACH (dostawcy w wierszach, odbiorcy w kolumnach) ===
+        st.subheader("Zestawienie na trasach (przychód, koszty, zysk)")
+
+        # Obliczenia pomocnicze
+        total_purchase_per_supplier = []  # do wiersza podsumowania dostawców
+        for i, supplier in enumerate(supply_names):
+            total_purchase = 0
+            for j, customer in enumerate(demand_names):
+                volume = allocation[i][j]
+                if volume > 0:
+                    total_purchase += buy_cost[i] * volume
+            total_purchase_per_supplier.append(total_purchase)
+
+        total_revenue_per_customer = []  # do kolumny podsumowania odbiorców
+        for j, customer in enumerate(demand_names):
+            total_revenue = 0
+            for i, supplier in enumerate(supply_names):
+                volume = allocation[i][j]
+                if volume > 0:
+                    total_revenue += sell_price[j] * volume
+            total_revenue_per_customer.append(total_revenue)
+
+        # Tworzenie tabeli przestawnej: dostawcy (wiersze) x odbiorcy (kolumny)
+        pivot_data = []
+
+        for i, supplier in enumerate(supply_names):
+            row_data = {"Dostawca": supplier}
+
+            # Kolumny dla każdego odbiorcy
+            for j, customer in enumerate(demand_names):
+                volume = allocation[i][j]
+                if volume > 0:
+                    purchase = buy_cost[i]
+                    transport_cost = transport[i][j]
+                    revenue = sell_price[j]
+                    unit_profit = revenue - purchase - transport_cost
+                    total_route_profit = volume * unit_profit
+
+                    row_data[f"{customer}\n"] = f"{transport_cost * volume:.2f}"
+                else:
+                    row_data[f"{customer}\n"] = "-"
+
+            # DODANA KOLUMNA: całkowite koszty zakupu od dostawcy
+            row_data["Całkowity koszt zakupu"] = f"{total_purchase_per_supplier[i]:.2f}"
+
+            pivot_data.append(row_data)
+
+        # DODANY WIERSZ: całkowity przychód na odbiorcy
+        # Najpierw tworzymy wiersz sumaryczny
+        summary_row = {"Dostawca": "Przychód:"}
+        for j, customer in enumerate(demand_names):
+            summary_row[f"{customer}\n"] = f"{total_revenue_per_customer[j]:.2f}"
+        summary_row["Całkowity koszt zakupu"] = "-"
+
+        pivot_data.append(summary_row)
+
+        df_pivot = pd.DataFrame(pivot_data)
+        st.dataframe(df_pivot, width='stretch', hide_index=True)
+
+        route_data = []
+        total_revenue = 0
+        total_transport_cost = 0
+        total_purchase_cost = 0
+
+        for i, supplier in enumerate(supply_names):
+            for j, customer in enumerate(demand_names):
+                volume = allocation[i][j]
+                if volume > 0:
+                    purchase = buy_cost[i]
+                    transport_cost = transport[i][j]
+                    revenue = sell_price[j]
+                    unit_profit = revenue - purchase - transport_cost
+                    total_route_profit = volume * unit_profit
+                    total_revenue += revenue * volume
+                    total_transport_cost += transport_cost * volume
+                    total_purchase_cost += purchase * volume
         st.subheader("Iteracje algorytmu")
 
         for it, alloc in enumerate(history):
@@ -640,6 +715,15 @@ with tabs[2]:
                         st.info("Brak dodatnich Δ – rozwiązanie optymalne")
 
         st.subheader("Podsumowanie")
+        col_a, col_b, col_c, col_d = st.columns(4)
+        with col_a:
+            st.metric("Łączny koszt zakupu", f"{total_purchase_cost:,.2f}")
+        with col_b:
+            st.metric("Łączny koszt transportu", f"{total_transport_cost:,.2f}")
+        with col_c:
+            st.metric("Łączny przychód", f"{total_revenue:,.2f}")
+        with col_d:
+            st.metric("Łączny zysk (zgodny)", f"{total_profit:,.2f}")
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Podaż rzeczywista", f"{sum(supply)}")

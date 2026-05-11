@@ -1,17 +1,12 @@
 PROJECT CODE DUMP
-FILES: 9
+FILES: 4
 ================================================================================
 
 INDEX:
 .streamlit/config.toml
 app.py
-cpm/__init__.py
-cpm/algorithm.py
-cpm/gantt.py
-cpm/graph.py
-pages/__init__.py
-pages/index.py
 scripts/merge.py
+src/algorithm.py
 
 ================================================================================
 
@@ -26,356 +21,694 @@ showSidebarNavigation = false
 FILE: app.py
 ================================================================================
 # app.py
+import numpy as np
 import pandas as pd
 import streamlit as st
-import networkx as nx
-import matplotlib.pyplot as plt
-from cpm.algorithm import CPMManager
-from cpm.graph import generate_cpm_graph
-from cpm.gantt import gantt_chart
-from io import BytesIO
+from src.algorithm import solve_intermediary
 
-st.set_page_config(layout="wide", page_title="CPM Visualizer")
+st.set_page_config(layout="wide", page_title="Zagadnienie Pośrednika – NW")
 
-# ---- Style ----
-st.markdown("""
+st.markdown(
+    """
 <style>
     header.stAppHeader { background-color: transparent; }
-    section.stMain .block-container { padding-top: 0rem; z-index: 1; }
+    section.stMain .block-container { padding-top: 1rem; }
     .stAppDeployButton { display:none }
-</style>""", unsafe_allow_html=True)
+    .dataframe { font-size: 14px; }
+</style>""",
+    unsafe_allow_html=True,
+)
 
-# ---- Dane i Sidebar ----
-sidebar, content = st.columns([0.3, 0.7], border=True)
 
-formats = {0: "Poprzednicy", 1: "Następstwo zdarzeń"}
 
-if 'df0' not in st.session_state:
-    st.session_state.df0 = pd.DataFrame([
-        {"Czynność": "A", "Czas": 3, "Poprzednicy": ""},
-        {"Czynność": "B", "Czas": 4, "Poprzednicy": "A"},
-        {"Czynność": "C", "Czas": 6, "Poprzednicy": "A"},
-        {"Czynność": "D", "Czas": 6, "Poprzednicy": "B"},
-        {"Czynność": "E", "Czas": 4, "Poprzednicy": "B"},
-        {"Czynność": "F", "Czas": 4, "Poprzednicy": "C"},
-        {"Czynność": "G", "Czas": 6, "Poprzednicy": "D"},
-        {"Czynność": "H", "Czas": 8, "Poprzednicy": "E,F"},
-    ])
-if 'df1' not in st.session_state:
-    st.session_state.df1 = pd.DataFrame([
-        {"Czynność": "A", "Czas": 3, "Następstwo zdarzeń": "B,C"},
-        {"Czynność": "B", "Czas": 5, "Następstwo zdarzeń": "C"},
-        {"Czynność": "C", "Czas": 2, "Następstwo zdarzeń": ""}
-    ])
+def sync_supply_data():
+    """Synchronizuje koszty zakupu i macierz transportu z listą dostawców"""
+    current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
 
-with sidebar:
-    selection = st.segmented_control(
-        "Format danych", options=formats.keys(), default=0,
-        format_func=lambda x: formats[x], selection_mode="single"
+    current_buy = st.session_state.buy_cost_df
+    current_buy_suppliers = current_buy["Dostawca"].tolist()
+
+    if current_buy_suppliers != current_suppliers:
+        new_buy = pd.DataFrame({"Dostawca": current_suppliers, "Koszt zakupu": 0})
+        for i, supplier in enumerate(current_buy_suppliers):
+            if supplier in current_suppliers:
+                idx = current_suppliers.index(supplier)
+                new_buy.loc[idx, "Koszt zakupu"] = current_buy.iloc[i, 1]
+        st.session_state.buy_cost_df = new_buy
+
+    current_transport = st.session_state.transport_df
+    current_rows = current_transport.index.tolist()
+    current_cols = current_transport.columns.tolist()
+    new_cols = st.session_state.demand_df["Odbiorca"].tolist()
+
+    if current_rows != current_suppliers or current_cols != new_cols:
+        new_transport = pd.DataFrame(0, index=current_suppliers, columns=new_cols)
+        for i, row in enumerate(current_rows):
+            if row in current_suppliers:
+                for j, col in enumerate(current_cols):
+                    if col in new_cols:
+                        new_transport.loc[row, col] = current_transport.iloc[i, j]
+        st.session_state.transport_df = new_transport
+
+    current_blocked = st.session_state.blocked_df
+    current_blocked_rows = current_blocked.index.tolist()
+
+    if current_blocked_rows != current_suppliers or current_cols != new_cols:
+        new_blocked = pd.DataFrame(False, index=current_suppliers, columns=new_cols)
+        for i, row in enumerate(current_blocked_rows):
+            if row in current_suppliers:
+                for j, col in enumerate(current_blocked.columns):
+                    if col in new_cols:
+                        new_blocked.loc[row, col] = current_blocked.iloc[i, j]
+        st.session_state.blocked_df = new_blocked
+
+
+def sync_demand_data():
+    """Synchronizuje ceny sprzedaży i macierz transportu z listą odbiorców"""
+    current_customers = st.session_state.demand_df["Odbiorca"].tolist()
+
+    current_sell = st.session_state.sell_price_df
+    current_sell_customers = current_sell["Odbiorca"].tolist()
+
+    if current_sell_customers != current_customers:
+        new_sell = pd.DataFrame({"Odbiorca": current_customers, "Cena sprzedaży": 0})
+        for i, customer in enumerate(current_sell_customers):
+            if customer in current_customers:
+                idx = current_customers.index(customer)
+                new_sell.loc[idx, "Cena sprzedaży"] = current_sell.iloc[i, 1]
+        st.session_state.sell_price_df = new_sell
+
+    current_transport = st.session_state.transport_df
+    current_rows = current_transport.index.tolist()
+    current_cols = current_transport.columns.tolist()
+    new_rows = st.session_state.supply_df["Dostawca"].tolist()
+
+    if current_rows != new_rows or current_cols != current_customers:
+        new_transport = pd.DataFrame(0, index=new_rows, columns=current_customers)
+        for i, row in enumerate(current_rows):
+            if row in new_rows:
+                for j, col in enumerate(current_cols):
+                    if col in current_customers:
+                        new_transport.loc[row, col] = current_transport.iloc[i, j]
+        st.session_state.transport_df = new_transport
+
+    current_blocked = st.session_state.blocked_df
+    current_blocked_rows = current_blocked.index.tolist()
+    current_blocked_cols = current_blocked.columns.tolist()
+
+    if current_blocked_rows != new_rows or current_blocked_cols != current_customers:
+        new_blocked = pd.DataFrame(False, index=new_rows, columns=current_customers)
+        for i, row in enumerate(current_blocked_rows):
+            if row in new_rows:
+                for j, col in enumerate(current_blocked_cols):
+                    if col in current_customers:
+                        new_blocked.loc[row, col] = current_blocked.iloc[i, j]
+        st.session_state.blocked_df = new_blocked
+
+
+# ============================================================
+# INICJALIZACJA DATAFRAME'ÓW W SESSION STATE
+# ============================================================
+
+if "supply_df" not in st.session_state:
+    st.session_state.supply_df = pd.DataFrame(
+        {"Dostawca": ["D1", "D2"], "Podaż": [20, 30]}
     )
-    key = f"df{selection}"
-    st.session_state[key] = st.data_editor(st.session_state[key], num_rows="dynamic", use_container_width=True)
-    active_df = st.session_state[key]
 
-with content:
-    st.title("Wizualizacja CPM")
-    if not active_df.empty:
-        try:
-            # 1. Inicjalizacja menedżera logiki
-            manager = CPMManager(active_df, selection)
+if "demand_df" not in st.session_state:
+    st.session_state.demand_df = pd.DataFrame(
+        {"Odbiorca": ["O1", "O2", "O3"], "Popyt": [10, 28, 27]}
+    )
 
-            # 2. Budowanie grafów
-            g_aon = manager.build_aon()
-            g_aoa = manager.build_aoa()
+if "buy_cost_df" not in st.session_state:
+    st.session_state.buy_cost_df = pd.DataFrame(
+        {"Dostawca": ["D1", "D2"], "Koszt zakupu": [10, 12]}
+    )
 
-            # 3. Grafy AON i AOA
-            c1, c2 = st.columns(2)
-            with c1:
-                st.subheader("🟦 Model AON")
-                img_aon = generate_cpm_graph(g_aon, "Model AON", is_aoa=False)
-                st.image(img_aon)
-            with c2:
-                st.subheader("🔵 Model AOA")
-                img_aoa = generate_cpm_graph(g_aoa, "Model AOA", is_aoa=True)
-                st.image(img_aoa)
+if "sell_price_df" not in st.session_state:
+    st.session_state.sell_price_df = pd.DataFrame(
+        {"Odbiorca": ["O1", "O2", "O3"], "Cena sprzedaży": [30, 25, 30]}
+    )
 
-            # 4. Wykres Gantta
-            st.divider()
-            st.subheader("📊 Wykres Gantta")
-            img_gantt = gantt_chart(g_aon)
-            if img_gantt:
-                st.image(img_gantt, use_container_width=True)
-            else:
-                st.warning("Nie można wygenerować wykresu Gantta – sprawdź dane wejściowe.")
+if "transport_df" not in st.session_state:
+    st.session_state.transport_df = pd.DataFrame(
+        [[8, 14, 17], [12, 9, 19]], index=["D1", "D2"], columns=["O1", "O2", "O3"]
+    )
+    st.session_state.transport_df.index.name = "Dostawca\\Odbiorca"
 
-        except Exception as e:
-            st.error(f"Błąd logiki: {e}")
+if "blocked_df" not in st.session_state:
+    blocked_data = np.full((2, 3), False)
+    st.session_state.blocked_df = pd.DataFrame(
+        blocked_data, index=["D1", "D2"], columns=["O1", "O2", "O3"]
+    )
+    st.session_state.blocked_df.index.name = "Dostawca\\Odbiorca"
 
-FILE: cpm/__init__.py
-================================================================================
-# cpm/__init__.py
+# ============================================================
+# UI
+# ============================================================
 
+st.title("Zagadnienie pośrednika")
 
-FILE: cpm/algorithm.py
-================================================================================
-# cpm/algorithm.py
-import networkx as nx
-
-class CPMManager:
-    def __init__(self, df, mode):
-        self.df = df
-        self.mode = mode # 0 dla Poprzedników, 1 dla Następnych
-
-    def build_aon(self):
-        G = nx.DiGraph()
-        for _, r in self.df.iterrows():
-            task = str(r["Czynność"]).strip().upper()
-            if not task: continue
-            G.add_node(task, d=r.get("Czas", 0))
-            
-            col = "Poprzednicy" if self.mode == 0 else "Następstwo zdarzeń"
-            rel = str(r.get(col, "")).strip()
-            
-            if rel and rel.lower() not in ["none", "nan", ""]:
-                for target in rel.split(","):
-                    t = target.strip().upper()
-                    if self.mode == 0: G.add_edge(t, task)
-                    else: G.add_edge(task, t)
-        return G
-
-    def build_aoa(self):
-        G = nx.DiGraph()
-        # Prosta wersja AOA dla celów wizualnych
-        ends, nodes, start = {}, 1, 0
-        for _, r in self.df.iterrows():
-            task = str(r["Czynność"]).strip().upper()
-            if not task: continue
-            
-            col = "Poprzednicy" if self.mode == 0 else "Następstwo zdarzeń"
-            rel = str(r.get(col, "")).strip()
-            preds = rel.split(",") if rel and rel.lower() not in ["none", "nan", ""] else []
-            
-            u = ends.get(preds[0].strip().upper(), start) if preds else start
-            v = nodes
-            G.add_edge(u, v, label=f"{task}({r.get('Czas', 0)})")
-            ends[task], nodes = v, nodes + 1
-        return G
-
-FILE: cpm/gantt.py
-================================================================================
-# cpm/gantt.py
-import networkx as nx
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from io import BytesIO
-
-
-#Obliczanie (ES, EF, LS, LF)
-
-def compute_cpm(G: nx.DiGraph) -> dict:
-    if not G.nodes:
-        return {}
-    #zbiera czasy trwania operacji
-    duration = {}
-    for i in G.nodes:
-        duration[i] = G.nodes[i].get("d", 0)
-    #Operacje w kolejności topologicznej
-    topolist = list(nx.topological_sort(G))
-
-    #Early start i Early Finish
-    ES = {}
-    EF = {}
-    for i in topolist:
-        pre = list(G.predecessors(i))
-    
-        if len(pre) == 0:
-            ES[i] = 0
-        else:
-            mozliwe_starty = []
-            for p in pre:
-                mozliwe_starty.append(EF[p])
-            ES[i] = max(mozliwe_starty)
-        EF[i] = ES[i] + duration[i]
-
-    project_end = max(EF.values())
-
-    #Late start i Late Finish
-    LF = {}
-    LS = {}
-    for i in reversed(topolist):
-        post = list(G.successors(i))
-        if len(post) == 0:
-            LF[i] = project_end
-        else:
-            mozliwe_konce = []
-            for s in post:
-                mozliwe_konce.append(ES[s])
-            LF[i] = min(mozliwe_konce)
-        LS[i] = LF[i] - duration[i]
-
-    result = {}
-    for i in topolist:
-        result[i] = {
-            "ES": ES[i],
-            "EF": EF[i],
-            "LS": LS[i],
-            "LF": LF[i],
-            "TF": LS[i] - ES[i],
-        }
-    return result
-
-def gantt_chart(G: nx.DiGraph) -> BytesIO | None:
-    if not G or not G.nodes:
-        return None
-
-    cpm = compute_cpm(G)
-    if not cpm:
-        return None
-
-    # Sortowanie czynności według ES, potem nazwy
-    tasks = sorted(cpm.keys(), key=lambda n: (cpm[n]["ES"], n))
-    n_tasks = len(tasks)
-    project_end = max(v["LF"] for v in cpm.values())
-
-
-    bar_h  = 0.5   # wysokość paska zadania
-    y_gap  = 1.0   # odstęp między wierszami
-
-    graph_height = max(4, n_tasks * y_gap + 1.5) # wysokość wykresu
-    #okno i obszar rysowania
-    fig, ax = plt.subplots(figsize=(12, graph_height), facecolor="#fbfcfd")
-    ax.set_facecolor("#fbfcfd")
-
-    for i, task in enumerate(tasks):
-        info = cpm[task]
-        y = (n_tasks - 1 - i) * y_gap   # oś Y od góry
-        es, ef = info["ES"], info["EF"]
-        ls, lf = info["LS"], info["LF"]
-        tf     = info["TF"]
-        dur    = G.nodes[task].get("d", 0)
-        is_critical = (tf == 0)
-
-        bar_color = "#EF4444" if is_critical else "#1E3A8A" 
-
-        # Pasek ES→EF (realizacja)
-        ax.barh(y, ef - es, left=es, height=bar_h,
-                color=bar_color, edgecolor="black", linewidth=0.5,
-                align="center", zorder=3)
-
-        # Pasek zapasu czasu EF→LF (float)
-        if tf > 0:
-            ax.barh(y, tf, left=ef, height=bar_h * 0.4,
-                    color="#334155", edgecolor="#64748B", linewidth=0.4,
-                    align="center", zorder=2, hatch="//", alpha=0.7)
-
-        # Etykieta na pasku: nazwa + czas
-        ax.text(es + (ef - es) / 2, y, f"{task} ({dur})",
-                ha="center", va="center",
-                fontsize=8, fontweight="bold", color="black", zorder=4)
-
-        # Etykiety ES / EF po bokach
-        ax.text(es - 0.1, y, str(es), ha="right", va="center",
-                fontsize=7, color="#94A3B8")
-        ax.text(ef + 0.1 + (tf if tf > 0 else 0), y, str(lf),
-                ha="left", va="center", fontsize=7, color="#94A3B8")
-
-    # --- Oś X i siatka ---
-    ax.set_xlim(-0.5, project_end + 1)
-    ax.set_ylim(-y_gap, n_tasks * y_gap)
-    ax.set_yticks([])
-
-    ax.set_xticks(range(0, int(project_end) + 2))
-    ax.tick_params(axis="x", colors="#94A3B8", labelsize=8)
-    ax.xaxis.label.set_color("#94A3B8")
-    ax.set_xlabel("Czas", color="#94A3B8", fontsize=9)
-
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#1e2530")
-
-    ax.set_axisbelow(True)
-    ax.xaxis.grid(True, color="#1e2530", linewidth=0.7, linestyle="--", zorder=0)
-
-    # --- Legenda ---
-    legend_elements = [
-        mpatches.Patch(facecolor="#EF4444", edgecolor="black", label="Ścieżka krytyczna (TF=0)"),
-        mpatches.Patch(facecolor="#1E3A8A" ,   edgecolor="black", label="Czynność zwykła"),
-        mpatches.Patch(facecolor="#334155", edgecolor="#64748B",
-                       hatch="//", alpha=0.7, label="Zapas czasu (TF)"),
+tabs = st.tabs(
+    [
+        "Dane dostawców i odbiorców",
+        "Blokowanie tras",
+        "Rozwiązanie",
+        "Opis programu",
     ]
-    ax.legend(handles=legend_elements, loc="lower right",
-              facecolor="#1e2530", edgecolor="#334155",
-              labelcolor="black", fontsize=8)
+)
 
-    ax.set_title("Wykres Gantta (CPM)", color="black", fontsize=12, pad=10)
+with tabs[0]:
 
-    fig.tight_layout()
-    buf = BytesIO()
-    plt.savefig(buf, format="png", transparent=False, dpi=130,
-                bbox_inches="tight", facecolor="#fbfcfd")
-    plt.close()
-    return buf
+    if "should_rerun" not in st.session_state:
+        st.session_state.should_rerun = False
+    col1, col2 = st.columns(2)
 
-FILE: cpm/graph.py
-================================================================================
-# cpm/graph.py
-import networkx as nx
-import matplotlib.pyplot as plt
-from io import BytesIO
+    # KOLUMNA LEWA
+    with col1:
 
-def generate_cpm_graph(G, title, is_aoa=False):
-    if not G or not G.nodes: 
-        return None
-    
-    # 2. Ustawienie wyglądu okna i tła
-    fig, ax = plt.subplots(figsize=(10, 6), facecolor='#0e1117')
-    
-    # 3. UKŁADANIE: Wyznaczanie 'warstw' (od lewej do prawej)
-    # Przechodzimy przez graf w kolejności technologicznej
-    for node in nx.topological_sort(G):
-        predecessors = list(G.predecessors(node))
-        # Jeśli brak poprzedników, warstwa = 0 (start). 
-        # W przeciwnym razie warstwa to maks. warstwa poprzednika + 1
-        G.nodes[node]['layer'] = 0 if not predecessors else max(G.nodes[p]['layer'] for p in predecessors) + 1
-    
-    # Multipartite_layout ustawia węzły w pionowych kolumnach na podstawie ich 'layer'
-    pos = nx.multipartite_layout(G, subset_key="layer")
+        #DOSTAWCY
+        st.subheader("Podaż dostawców")
+        if "key_supply" not in st.session_state: st.session_state.key_supply = 0
+        supply_key = f"supply_editor{st.session_state.key_supply}"
+        edited_supply = st.data_editor(
+            st.session_state.supply_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Dostawca": st.column_config.TextColumn(required=True, validate=r"^.{1,}$"),
+                "Podaż": st.column_config.NumberColumn(format="%.2f", required=True, min_value=0.0)
+            },
+            hide_index=True,
+            num_rows="dynamic",
+            width='stretch',
+            key=supply_key,
+        )
 
-    # 4. RYSOWANIE: Wybór modelu wyświetlania
-    if is_aoa:
-        # Model AOA (Czynność na strzałce): Węzły to zdarzenia (koła)
-        nx.draw(G, pos, with_labels=True, node_color="#007BFF", node_size=700, ax=ax)
-        
-        # Pobieranie i rysowanie etykiet czynności na krawędziach (strzałkach)
-        edge_labels = nx.get_edge_attributes(G, 'label')
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8, font_color="#BFDBFE", bbox=dict(alpha=0))
-    else:
-        # Model AON (Czynność w węźle): Węzły to zadania (kwadraty)
-        # Przygotowanie etykiet z nazwą i czasem trwania (d)
-        node_labels = {n: f"{n}\n({G.nodes[n].get('d', 0)})" for n in G.nodes}
-        
-        nx.draw(G, pos, with_labels=True, labels=node_labels, 
-                node_shape="s", node_color="#1E3A8A", node_size=2000, font_color="white", ax=ax)
+        supply_not_changed = edited_supply.reset_index(drop=True).equals(st.session_state.supply_df.reset_index(drop=True))
+        supply_is_not_unique = not edited_supply["Dostawca"].is_unique
 
-    # 5. FINALIZACJA: Estetyka i eksport do Streamlit
-    ax.set_title(title, color="white")
-    ax.axis('off') # Ukrycie osi wykresu
-    
-    buf = BytesIO()
-    plt.savefig(buf, format="png", transparent=True)
-    plt.close()
-    return buf
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź dostawców",
+                        width='stretch',
+                        disabled=supply_not_changed or supply_is_not_unique,
+                        type="primary",
+                        key="confirm_supply",
+                        ):
+                st.session_state.supply_df = edited_supply.reset_index(drop=True)
+                sync_supply_data()
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        width='stretch',
+                        disabled=supply_not_changed,
+                        type="primary",
+                        key="cancel_supply"
+                        ):
+                st.session_state.key_supply += 1
+                st.session_state.should_rerun = True
 
-FILE: pages/__init__.py
-================================================================================
-# pages/__init__.py
+        if not edited_supply["Dostawca"].is_unique:
+            st.error("Zduplikowano nazwy dostawców. Popraw dane, aby móc zatwierdzić.")
+
+        with st.expander("Uwaga dotycząca synchronizacji danych"):
+            st.write("""
+                Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach.
+                **Wszystkie niezatwierdzone zmiany w poniższych tabelach mogą przepaść:**
+                * Koszty zakupu
+                * Koszty transportu
+            """)
 
 
-FILE: pages/index.py
-================================================================================
-# pages/index.py
-import streamlit as st
+        #KOSZTA ZAKUPU
+        st.subheader("Koszty zakupu")
+        if "key_buy" not in st.session_state: st.session_state.key_buy = 0
+        buy_key=f"buy_editor{st.session_state.key_buy}"
+        edited_buy = st.data_editor(
+            st.session_state.buy_cost_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Dostawca": st.column_config.Column(disabled=True),
+                "Koszt zakupu": st.column_config.NumberColumn(format="%.2f", required=True)
+            },
+            hide_index=True,
+            num_rows="fixed",
+            width='stretch',
+            key=buy_key,
+        )
 
-st.title("Tutaj będzie jakieś menu")
+        buy_not_changed = edited_buy.reset_index(drop=True).equals(st.session_state.buy_cost_df.reset_index(drop=True))
+
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź koszty",
+                        width='stretch',
+                        disabled=buy_not_changed,
+                        type="primary",
+                        key="confirm_buy"
+                        ):
+                st.session_state.buy_cost_df = edited_buy.reset_index(drop=True)
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        width='stretch',
+                        disabled=buy_not_changed,
+                        type="primary",
+                        key="cancel_buy"
+                        ):
+                st.session_state.key_buy += 1
+                st.session_state.should_rerun = True
+
+
+    # KOLUMNA PRAWA
+    with col2:
+
+        #ODBIORCY
+        st.subheader("Popyt odbiorców")
+        if "key_demand" not in st.session_state: st.session_state.key_demand = 0
+        demand_key=f"demand_editor{st.session_state.key_demand}"
+        edited_demand = st.data_editor(
+            st.session_state.demand_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Odbiorca": st.column_config.TextColumn(required=True, validate=r"^.{1,}$"),
+                "Popyt": st.column_config.NumberColumn(format="%.2f", required=True, min_value=0.0)
+            },
+            hide_index=True,
+            num_rows="dynamic",
+            width='stretch',
+            key=demand_key,
+        )
+
+        demand_not_changed = edited_demand.reset_index(drop=True).equals(st.session_state.demand_df.reset_index(drop=True))
+        demand_is_not_unique = not edited_demand["Odbiorca"].is_unique
+
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź odbiorców",
+                        width='stretch',
+                        disabled=demand_not_changed or demand_is_not_unique,
+                        type="primary",
+                        key="confirm_demand"
+                        ):
+                st.session_state.demand_df = edited_demand.reset_index(drop=True)
+                sync_demand_data()
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        width='stretch',
+                        disabled=demand_not_changed,
+                        type="primary",
+                        key="cancel_demand"
+                        ):
+                st.session_state.key_demand += 1
+                st.session_state.should_rerun = True
+
+        if not edited_demand["Odbiorca"].is_unique:
+            st.error("Zduplikowano nazwy odbiorców. Popraw dane, aby móc zatwierdzić.")
+
+        with st.expander("Uwaga dotycząca synchronizacji danych"):
+            st.write("""
+                Zatwierdzenie zmian w tej tabeli może spowodować automatyczną aktualizację danych w używających ich modułach.
+                **Wszystkie niezatwierdzone zmiany w poniższych tabelach mogą przepaść:**
+                * Ceny sprzedaży
+                * Koszty transportu
+                * Blokowanie tras
+            """)
+
+
+        #CENY SPRZEDAŻY
+        st.subheader("Ceny sprzedaży")
+        if "key_sell" not in st.session_state: st.session_state.key_sell = 0
+        sell_key=f"sell_editor{st.session_state.key_sell}"
+        edited_sell = st.data_editor(
+            st.session_state.sell_price_df,
+            column_config={
+                "_index": st.column_config.Column("Indeks", disabled=True),
+                "Odbiorca": st.column_config.Column(disabled=True),
+                "Cena sprzedaży": st.column_config.NumberColumn(format="%.2f", required=True)
+            },
+            hide_index=True,
+            num_rows="fixed",
+            width='stretch',
+            key=sell_key,
+        )
+
+        sell_not_changed = edited_sell.reset_index(drop=True).equals(st.session_state.sell_price_df.reset_index(drop=True))
+
+        B1, B2 = st.columns(2)
+        with B1:
+            if st.button("Zatwierdź ceny",
+                        width='stretch',
+                        disabled=sell_not_changed,
+                        type="primary",
+                        key="confirm_sell"
+                        ):
+                st.session_state.sell_price_df = edited_sell.reset_index(drop=True)
+                st.session_state.should_rerun = True
+        with B2:
+            if st.button("Anuluj zmiany",
+                        width='stretch',
+                        disabled=sell_not_changed,
+                        type="primary",
+                        key="cancel_sell"
+                        ):
+                st.session_state.key_sell += 1
+                st.session_state.should_rerun = True
+
+
+    #KOSZTY TRANSPORTU
+    st.subheader("Koszty transportu")
+    if "key_transport" not in st.session_state: st.session_state.key_transport = 0
+    transport_key=f"transport_editor{st.session_state.key_transport}"
+
+    # Synchronizacja macierzy przed wyświetleniem
+    current_suppliers = st.session_state.supply_df["Dostawca"].tolist()
+    current_customers = st.session_state.demand_df["Odbiorca"].tolist()
+
+    if (
+        st.session_state.transport_df.index.tolist() != current_suppliers
+        or st.session_state.transport_df.columns.tolist() != current_customers
+    ):
+        st.session_state.transport_df = (
+            st.session_state.transport_df
+            .reindex(index=current_suppliers, columns=current_customers, fill_value=0.0)
+        )
+
+    transport_config = {
+        col: st.column_config.NumberColumn(format="%.2f", required=True)
+        for col in current_customers
+    }
+    transport_config["_index"] = st.column_config.Column("Dostawca\\Odbiorca", disabled=True)
+
+    edited_transport = st.data_editor(
+        st.session_state.transport_df,
+        column_config=transport_config,
+        width='stretch',
+        key=transport_key,
+    )
+
+    transport_not_changed = edited_transport.reset_index(drop=True).equals(st.session_state.transport_df.reset_index(drop=True))
+
+    B1, B2 = st.columns(2)
+    with B1:
+        if st.button("Zatwierdź koszta transportu",
+                    width='stretch',
+                    disabled=transport_not_changed,
+                    type="primary",
+                    key="confirm_transport"
+                    ):
+            st.session_state.transport_df = edited_transport
+            st.session_state.should_rerun = True
+    with B2:
+        if st.button("Anuluj zmiany",
+                    width='stretch',
+                    disabled=transport_not_changed,
+                    type="primary",
+                    key="cancel_transport"
+                    ):
+            st.session_state.key_transport += 1
+            st.session_state.should_rerun = True
+
+    #ODŚWIEŻ (jeśli są zatwierdzone zmiany)
+    if st.session_state.should_rerun:
+        st.session_state.should_rerun = False
+        st.rerun()
+
+
+#DOBÓR STATUSU NACISKU NA ODBIORCĘ:
+#Wymuś - jak na zajęciach, sprowadza się do zablokowania fikcyjnego dostawcy dla tego odbiorcy.
+#Normalny priorytet - traktowanie domyślne.
+#Wykreśl - całkowicie blokuje jakiekolwiek rzeczywiste dostawy do tego rzeczywistego odbiorcy.
+with tabs[1]:
+    st.subheader("Blokowanie tras")
+    if "key_settings" not in st.session_state: st.session_state.key_settings = 0
+    settings_key=f"customer_settings_editor{st.session_state.key_settings}"
+
+    current_customers = st.session_state.demand_df["Odbiorca"].tolist()
+
+    if (
+        "customer_settings_df" not in st.session_state
+        or st.session_state.customer_settings_df["Odbiorca"].tolist() != current_customers
+    ):
+        new_settings = pd.DataFrame({
+            "Odbiorca": current_customers,
+            "Nacisk": "Normalny przydział"
+        })
+
+        if "customer_settings_df" in st.session_state:
+            old_settings = st.session_state.customer_settings_df
+            mapping = dict(zip(old_settings["Odbiorca"], old_settings["Nacisk"]))
+            new_settings["Nacisk"] = new_settings["Odbiorca"].map(lambda x: mapping.get(x, "Normalny przydział"))
+
+        st.session_state.customer_settings_df = new_settings
+
+    edited_settings = st.data_editor(
+        st.session_state.customer_settings_df,
+        column_config={
+            "_index": st.column_config.Column("Indeks", disabled=True),
+            "Odbiorca": st.column_config.Column(disabled=True),
+            "Nacisk": st.column_config.SelectboxColumn(
+                "Nacisk",
+                options=["Wymuś", "Normalny przydział", "Wykreśl"],
+                required=True,
+                default="Normalny przydział"
+            )
+        },
+        width='stretch',
+        hide_index=True,
+        key=settings_key
+    )
+
+    settings_not_changed = edited_settings.reset_index(drop=True).equals(st.session_state.customer_settings_df.reset_index(drop=True))
+    is_already_reset = (edited_settings["Nacisk"]  == "Normalny przydział").all()
+
+    B1, B2, B3 = st.columns(3)
+    with B1:
+        if st.button("Zatwierdź blokady",
+                    width='stretch',
+                    disabled=settings_not_changed,
+                    type="primary",
+                    key="confirm_settings"
+                    ):
+            st.session_state.customer_settings_df = edited_settings
+            st.rerun()
+    with B2:
+        if st.button("Resetuj blokady",
+                    width='stretch',
+                    disabled=is_already_reset,
+                    type="primary",
+                    key="reset_settings"
+                    ):
+            st.session_state.customer_settings_df["Nacisk"] = "Normalny przydział"
+            st.session_state.key_settings += 1
+            st.rerun()
+    with B3:
+        if st.button("Anuluj zmiany",
+                    width='stretch',
+                    disabled=settings_not_changed,
+                    type="primary",
+                    key="cancel_settings"
+                    ):
+            st.session_state.key_settings += 1
+            st.rerun()
+
+    with st.expander("Opis dostępnych nacisków"):
+            st.write("""
+                * Wymuś - dany odbiorca będzie miał wysoki priorytet - wszelkie dostawy od fikcyjnego dostawcy będą w jego przypadku uznane za skrajnie niekorzystne.
+                * Normalny priorytet - dany odbiorca będzie miał normalny priorytet.
+                * Wykreśl - rzeczywiści dostawcy będą mieć rzeczywiste zyski z tras do tego odbiorcy traktowane jako skrajnie niekorzystne.
+            """)
+
+
+# ============================================================
+# Rozwiązanie
+# ============================================================
+
+
+def prepare_with_fictitious(
+    supply, demand, buy_cost, sell_price, transport, supply_names, demand_names, pressure
+):
+    """Dodaje fikcyjnego dostawcę i fikcyjnego odbiorcę"""
+    n_s = len(supply)
+    n_d = len(demand)
+
+    total_supply = sum(supply)
+    total_demand = sum(demand)
+
+    supply_final = supply.copy()
+    demand_final = demand.copy()
+    supply_names_final = supply_names.copy()
+    demand_names_final = demand_names.copy()
+
+    # Macierz zysku dla rzeczywistych
+    z = np.zeros((n_s, n_d))
+    for i in range(n_s):
+        for j in range(n_d):
+            z[i, j] = sell_price[j] - buy_cost[i] - transport[i, j]
+
+    # Fikcyjny odbiorca
+    fictional_demand = max(0, total_supply)
+    demand_final.append(fictional_demand)
+    demand_names_final.append("OF (Fikcyjny)")
+    z = np.hstack([z, np.zeros((n_s, 1))])
+
+    # Fikcyjny dostawca
+    fictional_supply = max(0, total_demand)
+    supply_final.append(fictional_supply)
+    supply_names_final.append("DF (Fikcyjny)")
+    z = np.vstack([z, np.zeros((1, len(demand_final)))])
+
+    #Nazwy dla kolumn i wierszy do tabel iteracyjnych ze zmiennymi dualnymi:
+    supply_names_AB = supply_names_final.copy()
+    demand_names_AB = demand_names_final.copy()
+    supply_names_AB.append("Beta")
+    demand_names_AB.append("Alfa")
+
+    # Nacisk - wykreślanie i wymuszanie tras
+    for j in range(n_d):
+            match pressure[j]:
+                case "Wymuś":
+                    z[n_s][j] = -1e9
+                case "Wykreśl":
+                    for i in range(n_s):
+                        z[i][j] = -1e9
+                case "Normalny priorytet" | _:
+                    continue
+
+
+    return z, supply_final, demand_final, supply_names_final, demand_names_final, supply_names_AB, demand_names_AB
+
+
+# Tab 3: Rozwiązanie
+with tabs[2]:
+    st.subheader("Rozwiąż zagadnienie pośrednika")
+
+    if st.button("Oblicz plan", type="primary", width='stretch'):
+        supply = st.session_state.supply_df["Podaż"].tolist()
+        demand = st.session_state.demand_df["Popyt"].tolist()
+        buy_cost = st.session_state.buy_cost_df["Koszt zakupu"].tolist()
+        sell_price = st.session_state.sell_price_df["Cena sprzedaży"].tolist()
+
+        transport = st.session_state.transport_df.values
+        pressure = st.session_state.customer_settings_df["Nacisk"].tolist()
+
+        supply_names = st.session_state.supply_df["Dostawca"].tolist()
+        demand_names = st.session_state.demand_df["Odbiorca"].tolist()
+
+        z, supply_final, demand_final, supply_names_final, demand_names_final, supply_names_AB, demand_names_AB = (
+            prepare_with_fictitious(
+                supply,
+                demand,
+                buy_cost,
+                sell_price,
+                transport,
+                supply_names,
+                demand_names,
+                pressure
+            )
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        col2.info(f"Bilans: podaż = {sum(supply)}, popyt = {sum(demand)}")
+        col3.info(
+            f"Dodano fikcyjnego odbiorcę (popyt={demand_final[-1]}) i fikcyjnego dostawcę (podaż={supply_final[-1]})"
+        )
+
+        with st.spinner("Obliczanie optymalnego planu..."):
+            allocation, history, deltas_history, total_profit = solve_intermediary(
+                z, supply_final, demand_final
+            )
+
+        col1.success(f"**Maksymalny całkowity zysk: {total_profit:,.2f}**")
+
+        st.subheader("Optymalny plan dostaw")
+        df_result = pd.DataFrame(
+            allocation, index=supply_names_final, columns=demand_names_final
+        )
+        st.dataframe(df_result.style.format("{:.0f}"), width='stretch')
+
+        st.subheader("Macierz zysku jednostkowego")
+        df_z = pd.DataFrame(z, index=supply_names_final, columns=demand_names_final)
+        st.dataframe(df_z.style.format("{:.2f}"), width='stretch')
+
+        st.subheader("Iteracje algorytmu")
+
+        for it, alloc in enumerate(history):
+            is_optimal = it == len(history) - 1
+
+            df_iter = pd.DataFrame(
+                alloc, index=supply_names_AB, columns=demand_names_AB
+            )
+
+            with st.expander(
+                f"Iteracja {it + 1}" + (" - OPTYMALNA" if is_optimal else "")
+            ):
+                st.dataframe(df_iter.style.format("{:.0f}"), width='stretch')
+
+                if it < len(deltas_history):
+                    _, deltas, max_d = deltas_history[it]
+
+                    df_deltas = pd.DataFrame(
+                        deltas, index=supply_names_final, columns=demand_names_final
+                    )
+                    st.write(f"**Maksymalna Δ = {max_d:.4f}**")
+                    st.dataframe(
+                        df_deltas.style.format("{:.2f}"), width='stretch'
+                    )
+
+                    if max_d < 0:
+                        st.info("Brak dodatnich Δ – rozwiązanie optymalne")
+
+        st.subheader("Podsumowanie")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Podaż rzeczywista", f"{sum(supply)}")
+            st.metric("Podaż fikcyjna", f"{supply_final[-1]}")
+            st.metric("Podaż całkowita", f"{sum(supply_final)}")
+        with col2:
+            st.metric("Popyt rzeczywisty", f"{sum(demand)}")
+            st.metric("Popyt fikcyjny", f"{demand_final[-1]}")
+            st.metric("Popyt całkowity", f"{sum(demand_final)}")
+        with col3:
+            st.metric("Liczba iteracji", f"{len(history)}")
+            st.metric("Maksymalny zysk", f"{total_profit:,.2f}")
+
+
+with tabs[3]:
+    st.subheader("Opis działania programu")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.text("\nProgram służy do rozwiązywania zagadnienia transportowego pośrednika dla wprowadzanych danych dostawców, odbiorców, kosztów transportu i priorytetów odbiorców. " \
+        "Istotą zagadnienia jest takie rozłożenie transportu między określonymi dostawcami a odbiorcami, aby zysk z transportu był dla pośrednika kupującego od danych dostawców i sprzedającego danym odbiorcom jak najwyższy. " \
+        "\n\n" \
+        "Uwzględnione mogą być również pewne naciski takie jak kontrakty o całkowitym zaspokojeniu popytu danego odbiorcy. " \
+        "Można też uwzględnić całkowitą blokadę odbiorcy, co sprawi, że cała dostawa dla niego spadnie na fikcyjnego dostawcę. " \
+        "Narzędzia te są dostępne w sekcji \"Blokada tras\". " \
+        "Ta wersja programu nie uwzględnie blokad i priorytetów na dostawcach. " \
+        "\n\n" \
+        "Program wykorzystuje podczas obliczeń metodę wierzchołka północno-zachodniego. Określa ona kolejność dobierania tras wewnątrz bloków o danym priorytecie. " \
+        "Wybierana jest najpierw trasa w górnym lewym rogu bloku, następnie zaś wybierane są kolejno trasy sąsienie po prawej lub poniżej, zależnie od tego czy zużyty został popyt czy podaż. " \
+        "Aby zrównoważyć całkowity popyt i podaż dla wariantów niezbilansowanych dodani są fikcyjni dostawcy i odbiorcy. Zawsze mają oni najniższy priorytet. " \
+        "Program pozwala przeanalizować cały proces obliczeniowy dzięki możliwości analizy tabel będących wynikami kolejnych iteracji algorytmu. " \
+        "W tym programie uwzględnia się tylko zagadnienie pojedynczego pośrednika z bezpośrednimi dostawami od dostawców do odbiorców. " \
+        "\n\n" \
+        "Aby przeprowadzić obliczenia najpierw uzupełnij dane w sekcji \"Dane dostawców i odbiorców\". " \
+        "Tabele zawierają już pewne przykładowe dane. Dla zaawansowanych badań można podawać ujemne ceny i koszta. Nazwy dostawców i odbiorców muszą być unikatowe i mieć przynajmniej 1 znak. " \
+        "Dane, które wprowadzasz nie zostaną wprowadzone do systemu a inne tabele nie zostaną o nie zaktualizowane dopóki nie zatwierdzisz zmian. " \
+        "Zatwierdzenie zmian w tabelach dotyczącyh odbiorców lub dostawców spowoduje utratę niezatwierdzonyc zmian w tabelach używających tych danych, jeśli liczba odbiorców lub dostawców ulegnie zmianie. " \
+        "Aby usunąć dostawców lub odbiorców zaznacz ich w komórkach lewej kolumny danej tabeli a następnie wciśniej klawisz DELETE. Możesz anulować wprowadzone zmiany klikając odpowiedni przycisk. " \
+        "Po wypełnieniu danych możesz wejść do sekcji \"Blokada tras\" i wybrać naciski na wybranych odbiorców. Opisy poszczególnych nacisków znajdują się w rozwijanej legndzie tej sekcji. " \
+        "\n\n" \
+        "Gdy wszystkie dane będą gotowe wejdź do sekcji \"Rozwiązanie\" i kliknij przycisk \"Oblicz plan\". Uzyskasz optymalny plan dostaw z najlepszym zyskiem dla zadanych nacisków. " \
+        "Będziesz mieć też rozwijany wgląd w wyniki w kolejnych iteracjach algorytmu. Na dole strony znajdzie się podsumowanie z kluczowymi wartościami liczbowymi." \
+        "\n\n" \
+        "Życzymy miłego użytkowania!" \
+        "\n\n" \
+        "\nProjekt wykorzystuje framework Streamlit." \
+        "\n\n" \
+        "")
 
 
 FILE: scripts/merge.py
@@ -624,4 +957,148 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+FILE: src/algorithm.py
+================================================================================
+# src/algorithm.py
+import numpy as np
+# Algorytm
+
+
+def north_west_corner(supply, demand):
+    """Rozwiązanie początkowe – metoda NW"""
+    n_supply = len(supply)
+    n_demand = len(demand)
+    allocation = np.zeros((n_supply, n_demand))
+    supply_left = supply.copy()
+    demand_left = demand.copy()
+
+    i, j = 0, 0
+    while i < n_supply and j < n_demand:
+        x = min(supply_left[i], demand_left[j])
+        allocation[i, j] = x
+        supply_left[i] -= x
+        demand_left[j] -= x
+
+        if supply_left[i] == 0:
+            i += 1
+        if demand_left[j] == 0:
+            j += 1
+    return allocation
+
+
+def compute_potentials(z, base_ones, n_supply, n_demand):
+    """Wyznacz α i β z równań: z_ij - α_i - β_j = 0 dla tras bazowych"""
+    alpha = [None] * n_supply
+    beta = [None] * n_demand
+
+    alpha[0] = 0
+
+    while None in alpha or None in beta:
+        changed = False
+        for i in range(n_supply):
+            for j in range(n_demand):
+                if base_ones[i, j]:
+                    if alpha[i] is not None and beta[j] is None:
+                        beta[j] = z[i, j] - alpha[i]
+                        changed = True
+                    elif beta[j] is not None and alpha[i] is None:
+                        alpha[i] = z[i, j] - beta[j]
+                        changed = True
+
+        if not changed and (None in alpha or None in beta):
+            found = False
+            for i in range(n_supply):
+                for j in range(n_demand):
+                    if not base_ones[i, j]:
+                        if (alpha[i] is not None and beta[j] is None) or \
+                           (beta[j] is not None and alpha[i] is None):
+                            base_ones[i, j] = True
+                            found = True
+                            break
+                if found: break
+
+    return alpha, beta, base_ones
+
+
+def compute_deltas(z, alpha, beta, base_ones, n_supply, n_demand):
+    """Δ_ij = z_ij - α_i - β_j dla komórek niebazowych"""
+    deltas = np.full((n_supply, n_demand), -np.inf)
+    for i in range(n_supply):
+        for j in range(n_demand):
+            if not base_ones[i][j] and alpha[i] is not None and beta[j] is not None:
+                deltas[i][j] = z[i][j] - alpha[i] - beta[j]
+    return deltas
+
+
+def find_cycle(base_ones, start_i, start_j, n_supply, n_demand):
+    """Znajdź cykl korekcyjny dla danej komórki"""
+    for i in range(n_supply):
+        if i != start_i and base_ones[i][start_j]:
+            for j in range(n_demand):
+                if j != start_j and base_ones[start_i][j] and base_ones[i][j]:
+                    return [(start_i, start_j), (i, start_j), (i, j), (start_i, j)]
+    return None
+
+
+def improve_solution(allocation, base_ones, cycle):
+    """Poprawa rozwiązania – przesunięcie w cyklu (+ - + -)"""
+    if not cycle:
+        return allocation
+    values = [allocation[i][j] for (i, j) in cycle[1::2]]
+    min_val = min(values)
+
+    for idx, (i, j) in enumerate(cycle):
+        if idx % 2 == 0:
+            allocation[i][j] += min_val
+        else:
+            allocation[i][j] -= min_val
+
+    base_ones[cycle[0][0]][cycle[0][1]] = True
+
+    for (i, j) in cycle[1::2]:
+        if allocation[i][j] == 0:
+            base_ones[i][j] = False
+            break
+
+    return allocation, base_ones
+
+
+def solve_intermediary(z, supply, demand, max_iter=100):
+    """Rozwiązuje zagadnienie pośrednika (maksymalizacja)"""
+    n_supply, n_demand = z.shape
+    allocation = north_west_corner(supply, demand)
+    base_ones = (allocation > 0)
+    history = []
+    iterations_deltas = []
+
+    for it in range(max_iter):
+        alpha, beta, base_ones = compute_potentials(z, base_ones, n_supply, n_demand)
+        deltas = compute_deltas(z, alpha, beta, base_ones, n_supply, n_demand)
+
+        alpha_col = np.array(alpha).reshape(-1, 1)
+        pom_tab = np.hstack((allocation, alpha_col))
+        beta_row = np.array(list(beta) + [np.nan]).reshape(1, -1)
+        allocationAB = np.vstack((pom_tab, beta_row))
+        history.append(allocationAB.copy())
+
+        max_delta = np.max(deltas)
+        iterations_deltas.append((it, deltas.copy(), max_delta))
+
+        if max_delta < 0:
+            break
+
+        max_deltas_in_order = np.argsort(deltas.ravel())[::-1]
+        for ind in max_deltas_in_order:
+            pos = np.argwhere(deltas == deltas.ravel()[ind])[0]
+            i0, j0 = pos[0], pos[1]
+
+            cycle = find_cycle(base_ones, i0, j0, n_supply, n_demand)
+            if cycle:
+                allocation, base_ones = improve_solution(allocation, base_ones, cycle)
+                break
+
+    total_profit = np.sum(allocation * z)
+    return allocation, history, iterations_deltas, total_profit
 
