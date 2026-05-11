@@ -174,7 +174,7 @@ with tabs[0]:
             column_config={
                 "_index": st.column_config.Column("Indeks", disabled=True),
                 "Dostawca": st.column_config.TextColumn(required=True, validate=r"^.{1,}$"),
-                "Podaż": st.column_config.NumberColumn(format="%.2f", required=True)
+                "Podaż": st.column_config.NumberColumn(format="%.2f", required=True, min_value=0.0)
             },
             hide_index=True,
             num_rows="dynamic",
@@ -270,7 +270,7 @@ with tabs[0]:
             column_config={
                 "_index": st.column_config.Column("Indeks", disabled=True),
                 "Odbiorca": st.column_config.TextColumn(required=True, validate=r"^.{1,}$"),
-                "Popyt": st.column_config.NumberColumn(format="%.2f", required=True)
+                "Popyt": st.column_config.NumberColumn(format="%.2f", required=True, min_value=0.0)
             },
             hide_index=True,
             num_rows="dynamic",
@@ -673,7 +673,7 @@ with tabs[3]:
         "W tym programie uwzględnia się tylko zagadnienie pojedynczego pośrednika z bezpośrednimi dostawami od dostawców do odbiorców. " \
         "\n\n" \
         "Aby przeprowadzić obliczenia najpierw uzupełnij dane w sekcji \"Dane dostawców i odbiorców\". " \
-        "Tabele zawierają już pewne przykładowe dane. Dla zaawansowanych badań można podawać ujemne popyt, podaż, ceny i koszta. Nazwy dostawców i odbiorców muszą być unikatowe i mieć przynajmniej 1 znak. " \
+        "Tabele zawierają już pewne przykładowe dane. Dla zaawansowanych badań można podawać ujemne ceny i koszta. Nazwy dostawców i odbiorców muszą być unikatowe i mieć przynajmniej 1 znak. " \
         "Dane, które wprowadzasz nie zostaną wprowadzone do systemu a inne tabele nie zostaną o nie zaktualizowane dopóki nie zatwierdzisz zmian. " \
         "Zatwierdzenie zmian w tabelach dotyczącyh odbiorców lub dostawców spowoduje utratę niezatwierdzonyc zmian w tabelach używających tych danych, jeśli liczba odbiorców lub dostawców ulegnie zmianie. " \
         "Aby usunąć dostawców lub odbiorców zaznacz ich w komórkach lewej kolumny danej tabeli a następnie wciśniej klawisz DELETE. Możesz anulować wprowadzone zmiany klikając odpowiedni przycisk. " \
